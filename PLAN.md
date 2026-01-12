@@ -5,52 +5,57 @@ Create a tree-sitter grammar for LPC (LDMud flavor) and a Topiary-based auto-for
 
 ---
 
-## Phase 1: Project Setup [CURRENT]
+## Phase 1: Project Setup [DONE]
 
 - [x] Create repository
 - [x] Initialize git
 - [x] Add .gitignore, CLAUDE.md, PLAN.md
-- [ ] Install tree-sitter CLI
-- [ ] Create package.json
-- [ ] Create initial grammar.js structure
+- [x] Install tree-sitter CLI
+- [x] Create package.json
+- [x] Create initial grammar.js structure
 
-## Phase 2: Grammar Conversion
+## Phase 2: Grammar Conversion [DONE - MANUAL]
 
-- [ ] Download yacc-to-tree-sitter tool
-- [ ] Run conversion on prolang.y
-- [ ] Format and review output
-- [ ] Identify what needs manual fixes
+- [x] Downloaded yacc-to-tree-sitter tool
+- [x] Attempted conversion - FAILED (StackOverflow on 23k line grammar)
+- [x] Wrote grammar manually based on tree-sitter-c patterns
 
-## Phase 3: Lexer Rules
+## Phase 3: Lexer Rules [DONE]
 
-Add token definitions to grammar.js:
-- [ ] Identifiers
-- [ ] Numbers (int, float, hex)
-- [ ] Strings (with escape sequences)
-- [ ] Comments (// and /* */)
-- [ ] Operators
-- [ ] Keywords
+- [x] Identifiers
+- [x] Numbers (int, float, hex)
+- [x] Strings (with escape sequences)
+- [x] Comments (// and /* */)
+- [x] Operators
+- [x] Keywords
 
-## Phase 4: Grammar Refinement
+## Phase 4: Grammar Refinement [DONE]
 
-- [ ] Fix conversion errors
-- [ ] Add precedence rules
-- [ ] Handle LPC-specific constructs:
-  - [ ] inherit statements
-  - [ ] Closures (: ... :)
-  - [ ] Mappings ([ ... ])
-  - [ ] Arrays ({ ... })
-  - [ ] String concatenation
-  - [ ] Preprocessor directives
+- [x] Add precedence rules
+- [x] Handle LPC-specific constructs:
+  - [x] inherit statements
+  - [x] Closures (: ... :)
+  - [x] Function refs (#'func)
+  - [x] Closure args ($1, $2)
+  - [x] Mappings ([ ... ])
+  - [x] Arrays ({ ... })
+  - [x] Range subscripts [0..7]
+  - [x] Case ranges (90..100)
+  - [x] Preprocessor directives (including inside functions)
 
-## Phase 5: Testing
+## Phase 5: Testing [IN PROGRESS]
 
-- [ ] Create test corpus
-- [ ] Parse sample files from dragonheart
-- [ ] Fix parse errors
-- [ ] Achieve 90%+ success rate on real files
+Current results on dragonheart codebase:
+- cmds/std: 70/103 files (68%) zero errors
+- cmds/wiz: 53/88 files (60%)
+- inherit: 8/27 files (30%)
+- secure/player: 3/11 files (27%)
 
-## Phase 6: Topiary Integration
+Known issues:
+- [ ] ANSI color macro concatenation (BD BE pattern)
+- [ ] Some complex preprocessor usage
+
+## Phase 6: Topiary Integration [PENDING]
 
 - [ ] Add Cargo.toml for Rust bindings
 - [ ] Create queries/formatting.scm
