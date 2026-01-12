@@ -22,30 +22,72 @@
 (function_definition) @append_hardline
 
 ; Allow blank lines after block statements (preserves from input)
+; Note: Must use explicit node types as (_) wildcard doesn't work with @allow_blank_line_before
 (compound_statement
-  (if_statement)
+  [
+    (if_statement)
+    (while_statement)
+    (for_statement)
+    (foreach_statement)
+    (switch_statement)
+  ]
   .
-  (_) @allow_blank_line_before
+  (expression_statement) @allow_blank_line_before
 )
 (compound_statement
-  (while_statement)
+  [
+    (if_statement)
+    (while_statement)
+    (for_statement)
+    (foreach_statement)
+    (switch_statement)
+  ]
   .
-  (_) @allow_blank_line_before
+  (declaration) @allow_blank_line_before
 )
 (compound_statement
-  (for_statement)
+  [
+    (if_statement)
+    (while_statement)
+    (for_statement)
+    (foreach_statement)
+    (switch_statement)
+  ]
   .
-  (_) @allow_blank_line_before
+  (if_statement) @allow_blank_line_before
 )
 (compound_statement
-  (foreach_statement)
+  [
+    (if_statement)
+    (while_statement)
+    (for_statement)
+    (foreach_statement)
+    (switch_statement)
+  ]
   .
-  (_) @allow_blank_line_before
+  (while_statement) @allow_blank_line_before
 )
 (compound_statement
-  (switch_statement)
+  [
+    (if_statement)
+    (while_statement)
+    (for_statement)
+    (foreach_statement)
+    (switch_statement)
+  ]
   .
-  (_) @allow_blank_line_before
+  (for_statement) @allow_blank_line_before
+)
+(compound_statement
+  [
+    (if_statement)
+    (while_statement)
+    (for_statement)
+    (foreach_statement)
+    (switch_statement)
+  ]
+  .
+  (return_statement) @allow_blank_line_before
 )
 
 (declaration) @append_hardline
@@ -127,7 +169,7 @@
 ; ============================================
 
 ; Each statement on its own line
-(expression_statement) @append_hardline
+(expression_statement) @append_hardline @allow_blank_line_before
 (return_statement) @append_hardline @allow_blank_line_before
 (break_statement) @append_hardline
 (continue_statement) @append_hardline
