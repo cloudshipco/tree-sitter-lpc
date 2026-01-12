@@ -5,6 +5,11 @@ node_modules/
 build/
 src/parser.c
 src/tree_sitter/
+src/grammar.json
+src/node-types.json
+*.dylib
+*.so
+*.wasm
 
 # Bindings
 bindings/

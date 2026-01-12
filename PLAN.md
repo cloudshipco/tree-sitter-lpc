@@ -55,13 +55,18 @@ Known issues:
 - [ ] ANSI color macro concatenation (BD BE pattern)
 - [ ] Some complex preprocessor usage
 
-## Phase 6: Topiary Integration [PENDING]
+## Phase 6: Topiary Integration [DONE]
 
-- [ ] Add Cargo.toml for Rust bindings
-- [ ] Create queries/formatting.scm
-- [ ] Configure Topiary
-- [ ] Test formatting on real code
-- [ ] Verify formatted code compiles
+- [x] Compiled native library (libtree-sitter-lpc.dylib)
+- [x] Create queries/formatting.scm
+- [x] Configure Topiary (.topiary/languages.ncl)
+- [x] Test formatting on real code
+- [ ] Verify formatted code compiles in LDMud
+
+Usage:
+```bash
+cat file.c | topiary format --configuration .topiary/languages.ncl --query queries/formatting.scm --language lpc
+```
 
 ---
 

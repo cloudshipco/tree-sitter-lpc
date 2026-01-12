@@ -314,8 +314,10 @@ module.exports = grammar({
     for_statement: $ => seq(
       'for',
       '(',
-      optional($._expression),
-      ';',
+      choice(
+        seq(optional($._expression), ';'),  // Traditional: for (i = 0; ...)
+        seq($._type, $.declarator, ';'),     // C99-style: for (int i = 0; ...)
+      ),
       optional($._expression),
       ';',
       optional($._expression),
@@ -523,11 +525,14 @@ module.exports = grammar({
     string_literal: $ => seq(
       '"',
       repeat(choice(
-        /[^"\\]+/,
+        $.string_content,
         $.escape_sequence,
       )),
       '"',
     ),
+
+    // Named node for string content (Topiary needs named nodes to preserve content)
+    string_content: $ => /[^"\\]+/,
 
     char_literal: $ => seq(
       "'",
