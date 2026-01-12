@@ -146,13 +146,14 @@ connection.onDocumentFormatting(
     }
 
     try {
-      // Run topiary
+      // Run topiary from tree-sitter-lpc directory so relative paths work
       const formatted = execSync(
         `topiary format --configuration "${topiaryConfigPath}" --query "${topiaryQueryPath}" --language lpc`,
         {
           input: text,
           encoding: "utf-8",
           maxBuffer: 10 * 1024 * 1024, // 10MB
+          cwd: treeSitterLpcPath, // Run from tree-sitter-lpc dir
         }
       );
 
