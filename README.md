@@ -23,89 +23,73 @@ A [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for LPC (Lar
 
 ### Prerequisites
 
-- Node.js (for tree-sitter CLI)
+- Node.js 18+
 - tree-sitter CLI: `npm install -g tree-sitter-cli`
+- [Topiary](https://topiary.tweag.io/) for formatting: `cargo install topiary-cli`
 
-### Generate Parser
+### Build
 
 ```bash
 npm install
+
+# Generate parser
 npx tree-sitter generate
+
+# Build WASM (for Node.js tools)
+npx tree-sitter build --wasm
+
+# Build native library (for Topiary)
+cc -shared -fPIC -I src src/parser.c -o libtree-sitter-lpc.dylib  # macOS
+cc -shared -fPIC -I src src/parser.c -o libtree-sitter-lpc.so     # Linux
 ```
 
-### Build Native Library (for Topiary)
+## Command-Line Tools
+
+### lpc-fmt
+
+Format and check LPC files:
 
 ```bash
-# macOS ARM64
-cc -arch arm64 -shared -fPIC -I src src/parser.c -o libtree-sitter-lpc.dylib
+# Check syntax
+./bin/lpc-fmt check file.c
 
-# macOS x86_64
-cc -arch x86_64 -shared -fPIC -I src src/parser.c -o libtree-sitter-lpc.dylib
+# Format to stdout
+./bin/lpc-fmt format file.c
 
-# Linux
-cc -shared -fPIC -I src src/parser.c -o libtree-sitter-lpc.so
+# Format in place
+./bin/lpc-fmt format -w file.c
+
+# Format from stdin
+cat file.c | ./bin/lpc-fmt format
 ```
 
-## Usage
+### tree-sitter parse
 
-### Parsing Files
+View the AST of a file:
 
 ```bash
-npx tree-sitter parse path/to/file.c
+npx tree-sitter parse file.c
 ```
 
-### Formatting with Topiary
-
-This grammar includes [Topiary](https://topiary.tweag.io/) formatting rules.
-
-1. Install Topiary:
-   ```bash
-   cargo install topiary-cli
-   ```
-
-2. Format LPC files:
-   ```bash
-   cat file.c | topiary format \
-     --configuration .topiary/languages.ncl \
-     --query queries/formatting.scm \
-     --language lpc
-   ```
-
-### Formatting Style
+## Formatting Style
 
 The formatter applies:
-- 4-space indentation
-- Spaces around binary operators (`a + b`, `x == y`)
-- Spaces after keywords (`if (`, `for (`, `return `)
-- Spaces after commas
-- Consistent brace placement (`} else {`)
-- No spaces inside parentheses or brackets
 
-## Neovim Integration
-
-This grammar works with Neovim's built-in tree-sitter support. See `nvim-setup.lua` for:
-- Tree-sitter parser registration
-- Filetype detection for LPC files
-- LSP configuration
-
-### Quick Setup
-
-1. Install the parser:
-   ```vim
-   :TSInstall lpc
-   ```
-
-2. Copy the contents of `nvim-setup.lua` to your Neovim config.
-
-3. Highlight queries are in `queries/highlights.scm`.
+- **2-space indentation**
+- **Spaces around operators**: `a + b`, `x == y`, `x = 1`
+- **Spaces after keywords**: `if (`, `for (`, `return `
+- **Spaces after commas**: `foo(a, b, c)`
+- **Braces on control statements**: Single-statement `if`/`while`/`for` get braces
+- **Blank lines**: After block statements, before `return`
+- **Case body indentation**: Code inside `case:` is indented
+- **Array/mapping spacing**: `({ 1, 2, 3 })` preserves internal spaces
+- **String concatenation**: Implicit `"a" "b"` becomes explicit `"a" + "b"`
 
 ## Language Server (LSP)
 
-A simple LSP server is included that provides:
-- **Diagnostics** - Parse errors from tree-sitter
-- **Formatting** - Via Topiary
+Provides diagnostics (parse errors) and formatting for editors.
 
-### LSP Setup
+### Setup
 
 ```bash
 cd lsp
@@ -113,31 +97,59 @@ npm install
 npm run build
 ```
 
-The LSP runs as:
-```bash
-node ~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js --stdio
+### Neovim Configuration
+
+```lua
+-- In your Neovim config
+vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+  pattern = { "*.c" },
+  callback = function()
+    -- Only set filetype to lpc for files in your MUD directories
+    local path = vim.fn.expand("%:p")
+    if path:match("dragonheart") or path:match("mudlib") then
+      vim.bo.filetype = "lpc"
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "lpc",
+  callback = function()
+    vim.lsp.start({
+      name = "lpc-lsp",
+      cmd = { "node", vim.fn.expand("~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
+      root_dir = vim.fn.getcwd(),
+    })
+  end,
+})
 ```
 
-See `nvim-setup.lua` for Neovim LSP configuration.
+## Testing
+
+Run the formatter test suite:
+
+```bash
+node test/formatter/test-formatter.js
+```
 
 ## Project Structure
 
 ```
 tree-sitter-lpc/
 ├── grammar.js              # Tree-sitter grammar definition
-├── src/
-│   └── parser.c            # Generated parser (do not edit)
+├── src/parser.c            # Generated parser (do not edit)
+├── bin/lpc-fmt             # CLI formatting tool
+├── lib/transform.js        # Shared transform/post-processing functions
 ├── queries/
 │   ├── formatting.scm      # Topiary formatting rules
-│   └── highlights.scm      # Neovim syntax highlighting
+│   └── highlights.scm      # Syntax highlighting
 ├── lsp/
 │   └── src/server.ts       # Language server
+├── test/
+│   └── formatter/          # Formatter test suite
 ├── .topiary/
 │   └── languages.ncl       # Topiary language configuration
-├── nvim-setup.lua          # Neovim configuration example
-├── test/
-│   └── sample.c            # Sample LPC file for testing
-└── libtree-sitter-lpc.dylib  # Native library (generated)
+└── nvim-setup.lua          # Neovim configuration example
 ```
 
 ## Known Limitations
@@ -145,12 +157,14 @@ tree-sitter-lpc/
 - ANSI color macro concatenation patterns (`RED_F"text"`) are not supported
   (these are invalid in recent LDMud versions anyway)
 - Some complex preprocessor usage may not parse correctly
+- No semantic analysis (type checking, unused variable detection)
 
-## Testing
+## Future Ideas
 
-Parse success rate on real LPC codebases:
-- `cmds/std`: ~66% of files parse and format correctly
-- Most failures are due to deprecated ANSI macro patterns
+- Static type checking
+- Go to definition / find references
+- Code completion
+- Unused variable warnings
 
 ## License
 
