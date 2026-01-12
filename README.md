@@ -81,19 +81,60 @@ The formatter applies:
 - Consistent brace placement (`} else {`)
 - No spaces inside parentheses or brackets
 
+## Neovim Integration
+
+This grammar works with Neovim's built-in tree-sitter support. See `nvim-setup.lua` for:
+- Tree-sitter parser registration
+- Filetype detection for LPC files
+- LSP configuration
+
+### Quick Setup
+
+1. Install the parser:
+   ```vim
+   :TSInstall lpc
+   ```
+
+2. Copy the contents of `nvim-setup.lua` to your Neovim config.
+
+3. Highlight queries are in `queries/highlights.scm`.
+
+## Language Server (LSP)
+
+A simple LSP server is included that provides:
+- **Diagnostics** - Parse errors from tree-sitter
+- **Formatting** - Via Topiary
+
+### LSP Setup
+
+```bash
+cd lsp
+npm install
+npm run build
+```
+
+The LSP runs as:
+```bash
+node ~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js --stdio
+```
+
+See `nvim-setup.lua` for Neovim LSP configuration.
+
 ## Project Structure
 
 ```
 tree-sitter-lpc/
 ├── grammar.js              # Tree-sitter grammar definition
 ├── src/
-│   ├── parser.c            # Generated parser (do not edit)
-│   ├── grammar.json        # Generated grammar JSON
-│   └── node-types.json     # Generated node types
+│   └── parser.c            # Generated parser (do not edit)
 ├── queries/
-│   └── formatting.scm      # Topiary formatting rules
+│   ├── formatting.scm      # Topiary formatting rules
+│   └── highlights.scm      # Neovim syntax highlighting
+├── lsp/
+│   └── src/server.ts       # Language server
 ├── .topiary/
 │   └── languages.ncl       # Topiary language configuration
+├── nvim-setup.lua          # Neovim configuration example
 ├── test/
 │   └── sample.c            # Sample LPC file for testing
 └── libtree-sitter-lpc.dylib  # Native library (generated)

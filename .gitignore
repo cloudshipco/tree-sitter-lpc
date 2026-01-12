@@ -32,3 +32,7 @@ Cargo.lock
 *.log
 src/parser.c
 *.jar
+
+# LSP build artifacts
+lsp/node_modules/
+lsp/dist/
