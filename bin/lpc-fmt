@@ -1,0 +1,136 @@
+#!/usr/bin/env node
+
+const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+
+// Find tree-sitter-lpc directory
+const ROOT = path.dirname(__dirname);
+
+// Add lsp/node_modules to module path for web-tree-sitter
+module.paths.unshift(path.join(ROOT, "lsp/node_modules"));
+
+const TOPIARY_CONFIG = path.join(ROOT, ".topiary/languages.ncl");
+const TOPIARY_QUERY = path.join(ROOT, "queries/formatting.scm");
+const WASM_PATH = path.join(ROOT, "tree-sitter-lpc.wasm");
+
+// Import shared transform functions
+const {
+  transformCode,
+  postProcessContinuationIndent,
+  checkSyntax,
+} = require(path.join(ROOT, "lib/transform.js"));
+
+let parser;
+let initialized = false;
+
+async function initParser() {
+  if (initialized) return;
+
+  const TreeSitter = require("web-tree-sitter");
+  await TreeSitter.init();
+
+  const LPC = await TreeSitter.Language.load(WASM_PATH);
+  parser = new TreeSitter();
+  parser.setLanguage(LPC);
+  initialized = true;
+}
+
+// Format with Topiary
+function formatWithTopiary(text) {
+  return execSync(
+    `topiary format --configuration "${TOPIARY_CONFIG}" --query "${TOPIARY_QUERY}" --language lpc`,
+    {
+      input: text,
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024,
+      cwd: ROOT,
+    }
+  );
+}
+
+// Main
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+    console.log(`Usage: lpc-fmt [command] [options] [file...]
+
+Commands:
+  check       Check syntax (report errors)
+  format      Format code (transform + topiary)
+
+Options:
+  -w, --write    Write formatted output back to file (format only)
+  -h, --help     Show this help
+
+Examples:
+  lpc-fmt check file.c           Check file for syntax errors
+  lpc-fmt format file.c          Print formatted code to stdout
+  lpc-fmt format -w file.c       Format file in place
+  cat file.c | lpc-fmt format    Format from stdin`);
+    process.exit(0);
+  }
+
+  const command = args[0];
+  const writeInPlace = args.includes("-w") || args.includes("--write");
+  const files = args.filter(a => !a.startsWith("-") && a !== command);
+
+  await initParser();
+
+  if (command === "check") {
+    let hasErrors = false;
+
+    if (files.length === 0) {
+      // Read from stdin
+      const text = fs.readFileSync(0, "utf-8");
+      const errors = checkSyntax(text, "<stdin>", parser);
+      for (const e of errors) {
+        console.log(`${e.file}:${e.line}:${e.column}: ${e.message}`);
+        hasErrors = true;
+      }
+    } else {
+      for (const file of files) {
+        const text = fs.readFileSync(file, "utf-8");
+        const errors = checkSyntax(text, file, parser);
+        for (const e of errors) {
+          console.log(`${e.file}:${e.line}:${e.column}: ${e.message}`);
+          hasErrors = true;
+        }
+      }
+    }
+
+    process.exit(hasErrors ? 1 : 0);
+  } else if (command === "format") {
+    if (files.length === 0) {
+      // Read from stdin
+      const text = fs.readFileSync(0, "utf-8");
+      const transformed = transformCode(text, parser);
+      const formatted = formatWithTopiary(transformed);
+      const postProcessed = postProcessContinuationIndent(formatted);
+      process.stdout.write(postProcessed);
+    } else {
+      for (const file of files) {
+        const text = fs.readFileSync(file, "utf-8");
+        const transformed = transformCode(text, parser);
+        const formatted = formatWithTopiary(transformed);
+        const postProcessed = postProcessContinuationIndent(formatted);
+
+        if (writeInPlace) {
+          fs.writeFileSync(file, postProcessed);
+          console.log(`Formatted: ${file}`);
+        } else {
+          process.stdout.write(postProcessed);
+        }
+      }
+    }
+  } else {
+    console.error(`Unknown command: ${command}`);
+    process.exit(1);
+  }
+}
+
+main().catch((e) => {
+  console.error(e.message);
+  process.exit(1);
+});

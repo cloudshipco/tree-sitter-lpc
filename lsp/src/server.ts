@@ -16,17 +16,19 @@ import {
 } from "vscode-languageserver/node";
 
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { execSync, spawn } from "child_process";
+import { execSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
+
+// Import shared transform functions
+const transformModule = require("../../lib/transform.js");
+const { transformCode, postProcessContinuationIndent, checkSyntax } = transformModule;
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 // Tree-sitter setup
-let Parser: any;
-let LPC: any;
 let parser: any;
 
 // Paths - these will be configured
@@ -35,9 +37,6 @@ let topiaryConfigPath = "";
 let topiaryQueryPath = "";
 
 connection.onInitialize(async (params: InitializeParams) => {
-  // Try to find tree-sitter-lpc installation
-  const workspaceFolders = params.workspaceFolders;
-
   // Default paths (can be overridden via settings)
   const homeDir = process.env.HOME || "";
   treeSitterLpcPath = path.join(homeDir, "Code/cloudship/tree-sitter-lpc");
@@ -48,11 +47,10 @@ connection.onInitialize(async (params: InitializeParams) => {
   try {
     const TreeSitter = require("web-tree-sitter");
     await TreeSitter.init();
-    Parser = TreeSitter;
 
     const wasmPath = path.join(treeSitterLpcPath, "tree-sitter-lpc.wasm");
     if (fs.existsSync(wasmPath)) {
-      LPC = await TreeSitter.Language.load(wasmPath);
+      const LPC = await TreeSitter.Language.load(wasmPath);
       parser = new TreeSitter();
       parser.setLanguage(LPC);
       connection.console.log("Tree-sitter LPC parser initialized");
@@ -82,37 +80,21 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
   const diagnostics: Diagnostic[] = [];
 
   try {
-    const tree = parser.parse(text);
-
-    // Find all ERROR nodes
-    const findErrors = (node: any) => {
-      if (node.type === "ERROR" || node.isMissing()) {
-        const startPos = node.startPosition;
-        const endPos = node.endPosition;
-
-        diagnostics.push({
-          severity: DiagnosticSeverity.Error,
-          range: {
-            start: Position.create(startPos.row, startPos.column),
-            end: Position.create(endPos.row, endPos.column),
-          },
-          message: node.isMissing()
-            ? `Missing: ${node.type}`
-            : `Syntax error`,
-          source: "lpc",
-        });
-      }
-
-      for (let i = 0; i < node.childCount; i++) {
-        findErrors(node.child(i));
-      }
-    };
-
-    findErrors(tree.rootNode);
+    const errors = checkSyntax(text, textDocument.uri, parser);
+    for (const e of errors) {
+      diagnostics.push({
+        severity: DiagnosticSeverity.Error,
+        range: {
+          start: Position.create(e.line - 1, e.column - 1),
+          end: Position.create(e.endLine - 1, e.endColumn - 1),
+        },
+        message: e.message,
+        source: "lpc",
+      });
+    }
   } catch (e) {
     connection.console.error(`Parse error: ${e}`);
   }
-
   connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
@@ -129,7 +111,8 @@ connection.onDocumentFormatting(
       return [];
     }
 
-    const text = document.getText();
+    // Transform code first (add braces, blank lines, explicit +)
+    const text = transformCode(document.getText(), parser);
 
     try {
       // Check if topiary is available
@@ -157,14 +140,16 @@ connection.onDocumentFormatting(
         }
       );
 
+      // Post-process to fix continuation indentation
+      const postProcessed = postProcessContinuationIndent(formatted);
+
       // Return full document replacement
-      const lastLine = document.lineCount - 1;
       const lastChar = document.getText().length;
 
       return [
         TextEdit.replace(
           Range.create(Position.create(0, 0), document.positionAt(lastChar)),
-          formatted
+          postProcessed
         ),
       ];
     } catch (e: any) {

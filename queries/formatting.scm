@@ -5,16 +5,49 @@
 ; COMMENTS
 ; ============================================
 
-; Comments get their own line
-(comment) @append_hardline
+; Comments get their own line and can have blank lines before them
+(comment) @append_hardline @allow_blank_line_before
 
 ; ============================================
 ; TOP-LEVEL SPACING
 ; ============================================
 
-; Blank line between top-level definitions
-(function_definition) @append_hardline @append_hardline
-(function_declaration) @append_hardline @append_hardline
+; Blank line before function definitions
+(
+  (_) @append_delimiter
+  .
+  (function_definition)
+  (#delimiter! "\n")
+)
+(function_definition) @append_hardline
+
+; Allow blank lines after block statements (preserves from input)
+(compound_statement
+  (if_statement)
+  .
+  (_) @allow_blank_line_before
+)
+(compound_statement
+  (while_statement)
+  .
+  (_) @allow_blank_line_before
+)
+(compound_statement
+  (for_statement)
+  .
+  (_) @allow_blank_line_before
+)
+(compound_statement
+  (foreach_statement)
+  .
+  (_) @allow_blank_line_before
+)
+(compound_statement
+  (switch_statement)
+  .
+  (_) @allow_blank_line_before
+)
+
 (declaration) @append_hardline
 (inherit_statement) @prepend_hardline @append_hardline
 
@@ -34,6 +67,27 @@
 (preproc_if) @append_hardline
 (preproc_undef) @append_hardline
 
+; #else and #endif need newlines
+(preproc_else
+  ["#else" "#elif"] @prepend_hardline @append_hardline
+)
+(preproc_ifdef
+  "#endif" @prepend_hardline @append_hardline
+)
+(preproc_if
+  "#endif" @prepend_hardline @append_hardline
+)
+
+; Newline after #if/#ifdef condition
+(preproc_if
+  "#if" @append_space
+  (preproc_arg) @append_hardline
+)
+(preproc_ifdef
+  ["#ifdef" "#ifndef"] @append_space
+  (identifier) @append_hardline
+)
+
 ; Space after #include
 (preproc_include
   "#include" @append_space
@@ -42,6 +96,16 @@
 ; Space after #define
 (preproc_define
   "#define" @append_space
+)
+
+; Space before macro value
+(preproc_define
+  (preproc_arg) @prepend_space
+)
+
+; No space between macro name and params (for function-like macros)
+(preproc_define
+  (preproc_params) @prepend_antispace
 )
 
 ; ============================================
@@ -64,10 +128,10 @@
 
 ; Each statement on its own line
 (expression_statement) @append_hardline
-(return_statement) @append_hardline
+(return_statement) @append_hardline @allow_blank_line_before
 (break_statement) @append_hardline
 (continue_statement) @append_hardline
-(if_statement) @append_hardline
+(if_statement) @append_hardline @allow_blank_line_before
 (while_statement) @append_hardline
 (for_statement) @append_hardline
 (foreach_statement) @append_hardline
@@ -99,10 +163,10 @@
 ; OPERATORS
 ; ============================================
 
-; Binary operators: space on both sides
+; Binary operators: space on both sides, preserve input newlines
 (binary_expression
   ["+" "-" "*" "/" "%" "||" "&&" "|" "^" "&" "==" "!=" ">" ">=" "<=" "<" "<<" ">>"]
-  @prepend_space @append_space
+  @prepend_space @append_space @append_input_softline
 )
 
 ; Assignment operators: space on both sides
@@ -147,23 +211,42 @@
   (type_specifier) @append_space
 )
 
+; Call expressions - preserve multi-line formatting
 (call_expression
-  "(" @append_antispace
-  ")" @prepend_antispace
+  "(" @append_antispace @append_input_softline @append_indent_start
+  ")" @prepend_input_softline @prepend_indent_end @prepend_antispace
 )
 
 ; ============================================
 ; FUNCTION DEFINITIONS
 ; ============================================
 
+; Space after modifier
+(function_definition
+  (modifier) @append_space
+)
+
+(function_declaration
+  (modifier) @append_space
+)
+
 ; Space between type and name
 (function_definition
+  (type_specifier) @append_space
+)
+
+(function_declaration
   (type_specifier) @append_space
 )
 
 ; ============================================
 ; DECLARATIONS
 ; ============================================
+
+; Space after modifier in declarations
+(declaration
+  (modifier) @append_space
+)
 
 ; Space after type in declarations
 (declaration
@@ -179,16 +262,24 @@
 ; LPC-SPECIFIC: ARRAYS AND MAPPINGS
 ; ============================================
 
-; Array literal: no space after ({ or before })
+; Array literal: preserve multi-line formatting
 (array_literal
-  "({" @append_antispace
-  "})" @prepend_antispace
+  "({" @append_antispace @append_input_softline @append_indent_start
+  "})" @prepend_input_softline @prepend_indent_end @prepend_antispace
 )
 
-; Mapping literal: no space after ([ or before ])
+; Mapping literal: preserve multi-line formatting
 (mapping_literal
-  "([" @append_antispace
-  "])" @prepend_antispace
+  "([" @append_antispace @append_input_softline @append_indent_start
+  "])" @prepend_input_softline @prepend_indent_end @prepend_antispace
+)
+
+; Preserve newlines after commas in arrays/mappings
+(array_literal
+  "," @append_input_softline
+)
+(mapping_literal
+  "," @append_input_softline
 )
 
 ; Mapping entry: space after colon
@@ -224,6 +315,18 @@
 ; No spaces around .. in case ranges (they're written as 0..8 not 0 .. 8)
 (case_statement
   ".." @prepend_antispace @append_antispace
+)
+
+; ============================================
+; STRING CONCATENATION
+; ============================================
+
+; Space between parts in concatenated strings (MACRO "str" MACRO)
+(concatenated_string
+  (string_literal) @prepend_space @append_space
+)
+(concatenated_string
+  (identifier) @prepend_space @append_space
 )
 
 ; ============================================

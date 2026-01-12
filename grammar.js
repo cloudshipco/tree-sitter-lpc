@@ -39,6 +39,7 @@ module.exports = grammar({
   conflicts: $ => [
     [$.type_specifier, $._expression],
     [$._expression, $.concatenated_string],
+    [$.type_specifier, $._string_concat_part],
     [$._type],  // Allow * to be ambiguous between type and declarator
   ],
 
@@ -139,7 +140,8 @@ module.exports = grammar({
       ')'
     ),
 
-    preproc_arg: $ => token(prec(-1, /[^\n]+/)),
+    // Match non-whitespace start, then rest of line (avoids capturing leading space)
+    preproc_arg: $ => token(prec(-1, /\S[^\n]*/)),
 
     system_lib_string: $ => /<[^>\n]+>/,
 
@@ -430,11 +432,15 @@ module.exports = grammar({
       ')',
     )),
 
+    // LPC array subscript with range support
+    // Supports: arr[i], arr[start..end], arr[<i], arr[start..<end], arr[<start..<end]
+    // The < prefix means "from end of array"
+    _range_index: $ => seq(optional('<'), $._expression),
     subscript_expression: $ => prec(PREC.SUBSCRIPT, seq(
       $._expression,
       '[',
-      $._expression,
-      optional(seq('..', optional($._expression))),  // LPC range syntax
+      $._range_index,
+      optional(seq('..', optional($._range_index))),  // LPC range syntax
       ']',
     )),
 
@@ -552,10 +558,12 @@ module.exports = grammar({
       ),
     )),
 
-    // Adjacent string literals are concatenated
+    // Adjacent string literals/macros are concatenated
+    // Supports patterns like: "str" "str", MACRO "str", "str" MACRO, MACRO "str" MACRO
+    _string_concat_part: $ => choice($.string_literal, $.identifier),
     concatenated_string: $ => prec.right(seq(
-      $.string_literal,
-      repeat1($.string_literal),
+      $._string_concat_part,
+      repeat1($._string_concat_part),
     )),
 
     // =========================================

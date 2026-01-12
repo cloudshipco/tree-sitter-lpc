@@ -17,6 +17,14 @@ tree-sitter-lpc/
 ├── queries/
 │   ├── highlights.scm  # Syntax highlighting
 │   └── formatting.scm  # Topiary formatting rules
+├── lib/
+│   └── transform.js    # Shared transform functions (used by CLI and LSP)
+├── bin/
+│   └── lpc-fmt         # CLI formatter tool
+├── lsp/
+│   └── src/server.ts   # LSP server for editor integration
+├── .topiary/
+│   └── languages.ncl   # Topiary language configuration
 ├── test/
 │   └── corpus/         # Test cases
 ├── package.json
@@ -38,8 +46,60 @@ tree-sitter parse path/to/file.c
 # Parse and show errors only
 tree-sitter parse path/to/file.c 2>&1 | grep ERROR
 
-# Format with Topiary (once configured)
+# Format with lpc-fmt CLI
+bin/lpc-fmt format path/to/file.c          # Print to stdout
+bin/lpc-fmt format -w path/to/file.c       # Write in place
+bin/lpc-fmt check path/to/file.c           # Check syntax only
+
+# Format with Topiary directly (lower level)
 topiary format --language lpc path/to/file.c
+```
+
+## Formatter (lpc-fmt)
+
+The `bin/lpc-fmt` CLI wraps Topiary with additional transforms:
+
+**Transforms applied (before Topiary):**
+- Convert implicit string concat to explicit: `"a" "b"` → `"a" + "b"`
+- Add braces to single-statement if/while/for/foreach
+- Add blank lines before return statements
+- Add blank lines after block statements (if/while/for/switch)
+
+**Post-processing (after Topiary):**
+- Fix continuation line indentation for multi-line expressions
+
+**Formatting style:**
+- 2-space indentation
+- Braces required on all control structures
+- Blank line before return (when preceded by non-block statement)
+- Blank line after block statements
+- Multi-line arrays/mappings preserved from input
+
+## LSP Server
+
+The `lsp/` directory contains a Language Server Protocol implementation for editor integration.
+
+**Features:**
+- Syntax error diagnostics (via tree-sitter parsing)
+- Document formatting (same transforms as CLI)
+
+**Setup for Neovim:**
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "lpc",
+  callback = function()
+    vim.lsp.start({
+      name = "lpc",
+      cmd = { "node", vim.fn.expand("~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
+      root_dir = vim.fn.getcwd(),
+    })
+  end,
+})
+```
+
+**Building:**
+```bash
+cd lsp && npm install && npm run build
 ```
 
 ## Development Workflow

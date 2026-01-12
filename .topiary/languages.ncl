@@ -7,7 +7,7 @@
           path = "./libtree-sitter-lpc.dylib",
         },
       },
-      indent = "    ",
+      indent = "  ",
     },
   },
 }
