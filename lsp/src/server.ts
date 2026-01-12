@@ -22,7 +22,7 @@ import * as fs from "fs";
 
 // Import shared transform functions
 const transformModule = require("../../lib/transform.js");
-const { transformCode, postProcessContinuationIndent, checkSyntax } = transformModule;
+const { transformCode, postProcessContinuationIndent, postProcessCaseIndent, checkSyntax } = transformModule;
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -140,8 +140,9 @@ connection.onDocumentFormatting(
         }
       );
 
-      // Post-process to fix continuation indentation
-      const postProcessed = postProcessContinuationIndent(formatted);
+      // Post-process to fix case body and continuation indentation
+      const withCaseIndent = postProcessCaseIndent(formatted);
+      const postProcessed = postProcessContinuationIndent(withCaseIndent);
 
       // Return full document replacement
       const lastChar = document.getText().length;

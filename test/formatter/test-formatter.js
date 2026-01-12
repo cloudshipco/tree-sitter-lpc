@@ -181,10 +181,10 @@ test("multi-line array preserved",
   });
 }`);
 
-test("single-line array stays single-line",
+test("single-line array stays single-line with spaces",
   `void f() { x = ({ 1, 2, 3 }); }`,
   `void f() {
-  x = ({1, 2, 3});
+  x = ({ 1, 2, 3 });
 }`);
 
 test("multi-line mapping preserved",
@@ -209,6 +209,46 @@ test("2-space indentation",
     if (y) {
       a();
     }
+  }
+}`);
+
+// Switch/case tests
+console.log("\nSwitch/Case:");
+
+test("case body is indented",
+  `void f() { switch (x) { case 0: printf("a"); break; default: printf("b"); } }`,
+  `void f() {
+  switch (x) {
+    case 0:
+      printf("a");
+      break;
+    default:
+      printf("b");
+  }
+}`);
+
+test("case range preserved",
+  `void f() { switch (x) { case 0..8: printf("a"); break; } }`,
+  `void f() {
+  switch (x) {
+    case 0..8:
+      printf("a");
+      break;
+  }
+}`);
+
+test("blank line before switch preserved",
+  `void f() {
+  x = 1;
+
+  switch (y) { case 0: break; }
+}`,
+  `void f() {
+  x = 1;
+
+  switch (y) {
+    case 0:
+      break;
   }
 }`);
 

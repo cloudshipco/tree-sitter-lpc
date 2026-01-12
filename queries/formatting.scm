@@ -177,8 +177,9 @@
 (while_statement) @append_hardline
 (for_statement) @append_hardline
 (foreach_statement) @append_hardline
-(switch_statement) @append_hardline
+(switch_statement) @append_hardline @allow_blank_line_before
 (do_statement) @append_hardline
+; Case statements get their own line (indentation handled in post-processing)
 (case_statement) @append_hardline
 
 ; ============================================
@@ -304,16 +305,16 @@
 ; LPC-SPECIFIC: ARRAYS AND MAPPINGS
 ; ============================================
 
-; Array literal: preserve multi-line formatting
+; Array literal: preserve multi-line formatting, keep space on single-line
 (array_literal
-  "({" @append_antispace @append_input_softline @append_indent_start
-  "})" @prepend_input_softline @prepend_indent_end @prepend_antispace
+  "({" @append_spaced_softline @append_indent_start
+  "})" @prepend_spaced_softline @prepend_indent_end
 )
 
-; Mapping literal: preserve multi-line formatting
+; Mapping literal: preserve multi-line formatting, keep space on single-line
 (mapping_literal
-  "([" @append_antispace @append_input_softline @append_indent_start
-  "])" @prepend_input_softline @prepend_indent_end @prepend_antispace
+  "([" @append_spaced_softline @append_indent_start
+  "])" @prepend_spaced_softline @prepend_indent_end
 )
 
 ; Preserve newlines after commas in arrays/mappings
