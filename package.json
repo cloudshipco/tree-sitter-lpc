@@ -1,0 +1,26 @@
+{
+  "name": "tree-sitter-lpc",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for LPC (LDMud flavor)",
+  "main": "bindings/node",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "lpc",
+    "ldmud",
+    "mud"
+  ],
+  "author": "James Pickard",
+  "license": "MIT",
+  "dependencies": {
+    "nan": "^2.18.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.24.0"
+  },
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  }
+}

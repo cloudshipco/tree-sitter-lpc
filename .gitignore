@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+src/parser.c
+src/tree_sitter/
+
+# Bindings
+bindings/
+
+# OS files
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Rust
+target/
+Cargo.lock
+
+# Test artifacts
+*.log
+src/parser.c
+*.jar
