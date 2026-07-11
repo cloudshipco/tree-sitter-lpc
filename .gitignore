@@ -36,3 +36,6 @@ src/parser.c
 # LSP build artifacts
 lsp/node_modules/
 lsp/dist/
+
+# Claude Code local settings
+.claude/settings.local.json
