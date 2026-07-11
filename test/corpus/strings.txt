@@ -1,0 +1,113 @@
+================================================================================
+Simple string
+================================================================================
+
+void f() { x = "hello"; }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (string_literal))))))
+
+================================================================================
+String with escape sequences
+================================================================================
+
+void f() { x = "hello\nworld\t!"; }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (string_literal))))))
+
+================================================================================
+String with line continuation
+================================================================================
+
+void f() {
+  x = "hello\
+world";
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (string_literal))))))
+
+================================================================================
+String with multiple line continuations
+================================================================================
+
+void f() {
+  x = "line one\
+line two\
+line three";
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (string_literal))))))
+
+================================================================================
+String with slashes (not comments)
+================================================================================
+
+void f() {
+  x = "////////////////";
+  y = "http://example.com";
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (string_literal)))
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (string_literal))))))

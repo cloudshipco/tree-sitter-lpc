@@ -12,6 +12,7 @@
 
 const PREC = {
   PAREN_DECLARATOR: -10,
+  COMMA: -3,  // Lowest precedence operator
   ASSIGNMENT: -2,
   CONDITIONAL: -1,
   DEFAULT: 0,
@@ -64,6 +65,7 @@ module.exports = grammar({
       $.preproc_ifdef,
       $.preproc_if,
       $.preproc_undef,
+      $.preproc_pragma,
     ),
 
     // =========================================
@@ -102,9 +104,16 @@ module.exports = grammar({
       /\n/
     ),
 
+    // #pragma directive (save_types, strong_types, etc.)
+    preproc_pragma: $ => seq(
+      '#pragma',
+      optional($.preproc_arg),
+      /\n/
+    ),
+
     preproc_ifdef: $ => seq(
       choice('#ifdef', '#ifndef'),
-      $.identifier,
+      choice($.identifier, $.number_literal),  // Allow #ifdef 0 pattern
       /\n/,
       repeat($._preproc_body_item),
       optional($.preproc_else),
@@ -141,7 +150,8 @@ module.exports = grammar({
     ),
 
     // Match non-whitespace start, then rest of line (avoids capturing leading space)
-    preproc_arg: $ => token(prec(-1, /\S[^\n]*/)),
+    // Supports backslash line continuation: \<newline> continues to next line
+    preproc_arg: $ => token(prec(-1, /\S([^\n\\]|\\(.|\n))*/)),
 
     system_lib_string: $ => /<[^>\n]+>/,
 
@@ -192,14 +202,18 @@ module.exports = grammar({
       $._type,
       optional($.identifier),
       optional(seq('...', optional($.identifier))),
+      optional(seq('=', $._expression)),  // Default parameter value
     ),
 
     // =========================================
     // TYPES
     // =========================================
+    // Supports union types: object|int*, string|int|float
+    // First type_specifier with optional *, then optionally more |type* parts
     _type: $ => seq(
       $.type_specifier,
-      optional('*'),  // Array/pointer marker
+      optional('*'),
+      repeat(seq('|', $.type_specifier, optional('*'))),
     ),
 
     type_specifier: $ => choice(
@@ -328,12 +342,16 @@ module.exports = grammar({
     ),
 
     // LPC-specific foreach
+    // Supports: foreach(x : expr)              // type inferred as mixed
+    //           foreach(type x : expr)
+    //           foreach(type k, type v : expr)
+    //           foreach(k, v1, v2, ... : expr)  // multi-value mappings
     foreach_statement: $ => seq(
       'foreach',
       '(',
-      $._type,
+      optional($._type),  // Type is optional (defaults to mixed)
       $.identifier,
-      optional(seq(',', $._type, $.identifier)),  // key, value
+      repeat(seq(',', optional($._type), $.identifier)),  // Additional variables
       ':',
       $._expression,
       ')',
@@ -361,8 +379,10 @@ module.exports = grammar({
       $.array_literal,
       $.mapping_literal,
       $.closure_literal,
+      $.inline_closure,  // function int(object o) { ... }
       $.function_ref,  // #'func_name
       $.closure_argument,  // $1, $2, etc. can be used in expressions
+      $.quoted_symbol,  // 'symbol for lambda expressions
       $.parenthesized_expression,
       $.unary_expression,
       $.binary_expression,
@@ -374,7 +394,9 @@ module.exports = grammar({
       $.update_expression,
       $.cast_expression,
       $.sizeof_expression,
+      $.catch_expression,
       $.scope_resolution,
+      $.comma_expression,
     ),
 
     parenthesized_expression: $ => seq('(', $._expression, ')'),
@@ -417,6 +439,14 @@ module.exports = grammar({
       $._expression,
     )),
 
+    // Comma operator: evaluates left, then right, returns right
+    // Used in: return x, 1; for(i=0, j=1; ...; i++, j++)
+    comma_expression: $ => prec.left(PREC.COMMA, seq(
+      $._expression,
+      ',',
+      $._expression,
+    )),
+
     conditional_expression: $ => prec.right(PREC.CONDITIONAL, seq(
       $._expression,
       '?',
@@ -428,19 +458,33 @@ module.exports = grammar({
     call_expression: $ => prec(PREC.CALL, seq(
       $._expression,
       '(',
-      commaSep($._expression),
+      commaSep($._call_argument),
       ')',
     )),
+
+    // Call argument can be a regular expression or a spread expression (arr...)
+    _call_argument: $ => choice(
+      $.spread_expression,
+      $._expression,
+    ),
+
+    // Spread operator: unpacks array into individual arguments
+    // e.g., func(args...) expands args array into separate arguments
+    spread_expression: $ => prec(PREC.UNARY, seq($._expression, '...')),
 
     // LPC array subscript with range support
     // Supports: arr[i], arr[start..end], arr[<i], arr[start..<end], arr[<start..<end]
     // The < prefix means "from end of array"
+    // Also supports multi-value mapping access: mapping[key, field]
     _range_index: $ => seq(optional('<'), $._expression),
     subscript_expression: $ => prec(PREC.SUBSCRIPT, seq(
       $._expression,
       '[',
       $._range_index,
-      optional(seq('..', optional($._range_index))),  // LPC range syntax
+      optional(choice(
+        seq('..', optional($._range_index)),  // LPC range syntax: arr[start..end]
+        seq(',', $._expression),              // Multi-value mapping: map[key, field]
+      )),
       ']',
     )),
 
@@ -469,6 +513,22 @@ module.exports = grammar({
       ')',
     )),
 
+    // LPC catch expression: catch(expr) or catch(expr;) or catch(expr; modifiers)
+    // Modifiers can be: nolog, publish, reserve <expr>
+    catch_expression: $ => prec(PREC.CALL, seq(
+      'catch',
+      '(',
+      $._expression,
+      optional(seq(';', optional($.catch_modifiers))),
+      ')',
+    )),
+
+    catch_modifiers: $ => repeat1(choice(
+      'nolog',
+      'publish',
+      seq('reserve', $._expression),
+    )),
+
     // LPC scope resolution ::func or Parent::func
     scope_resolution: $ => prec(PREC.CALL, seq(
       optional($.identifier),
@@ -481,41 +541,90 @@ module.exports = grammar({
     // =========================================
 
     // Array literal: ({ 1, 2, 3 })
+    // Opening is single token, closing allows whitespace between } and )
     array_literal: $ => seq(
-      '({',
+      $.array_open,
       commaSep($._expression),
       optional(','),
-      '})',
+      $.array_close,
     ),
+    array_open: $ => '({',
+    array_close: $ => seq('}', ')'),
 
     // Mapping literal: ([ "key": value ])
     mapping_literal: $ => seq(
-      '([',
+      $.mapping_open,
       commaSep($.mapping_entry),
       optional(','),
-      '])',
+      $.mapping_close,
     ),
+    mapping_open: $ => '([',
+    mapping_close: $ => seq(']', ')'),
 
+    // Mapping entry: key: value or just key (for subtraction like map -= ([key]))
+    // Supports multi-value mappings: key: val1; val2; val3
     mapping_entry: $ => seq(
       $._expression,
-      ':',
-      $._expression,
+      optional(seq(
+        ':',
+        $._expression,
+        repeat(seq(';', $._expression)),  // additional values for multi-dim mappings
+      )),
     ),
 
     // Closure literal: (: expr :) or (: $1 + $2 :)
     closure_literal: $ => seq(
-      '(:',
+      $.closure_open,
       optional($._expression),
-      ':)',
+      $.closure_close,
+    ),
+    closure_open: $ => '(:',
+    closure_close: $ => seq(':', ')'),
+
+    // Inline closure: function int(object o) { return ...; }
+    // Modern LDMud anonymous function syntax
+    inline_closure: $ => seq(
+      'function',
+      optional($._type),
+      $.parameter_list,
+      $.compound_statement,
     ),
 
-    // Function reference closure: #'func_name
+    // Function reference closure: #'func_name or #'operator
+    // LDMud allows operators like #'>, #'<, #'+, #'-, etc.
+    // Also supports namespace qualifiers: #'efun::func, #'::func
     function_ref: $ => seq(
       "#'",
-      $.identifier,
+      choice(
+        seq(optional(choice('efun', $.identifier)), '::', $.identifier),  // namespace::func
+        $.identifier,
+        // Operators that can be used as closures
+        '+', '-', '*', '/', '%',
+        '<', '>', '<=', '>=', '==', '!=',
+        '&', '|', '^', '~',
+        '<<', '>>',
+        '&&', '||', '!',
+        '?',       // conditional operator
+        ',',       // comma operator
+        '({', '})',  // array constructor
+        '([', '])',  // mapping constructor
+        // Indexing operators
+        '[', ']',
+        '[,]',     // multi-index
+        '[..]',    // range [start..end]
+        '[..<]',   // range [start..<end] (end from back)
+        '[<..]',   // range [<start..end] (start from back)
+        '[<..<]',  // range [<start..<end] (both from back)
+        '[<]',     // index from back
+      ),
     ),
 
     closure_argument: $ => /\$[0-9]+/,
+
+    // Quoted symbol: 'symbol (used in lambda expressions)
+    // Must be a token to distinguish from char_literal
+    // Lower precedence than char_literal so 'a' matches char_literal first
+    quoted_symbol: $ => token(prec(-1, seq("'", /[a-zA-Z_][a-zA-Z0-9_]*/))),
 
     // =========================================
     // LITERALS
@@ -528,33 +637,37 @@ module.exports = grammar({
       return token(choice(hex, float, decimal));
     },
 
-    string_literal: $ => seq(
+    // String literal as a single token to prevent comments from being inserted inside
+    // Supports escape sequences and backslash-newline line continuations
+    string_literal: $ => token(seq(
       '"',
       repeat(choice(
-        $.string_content,
-        $.escape_sequence,
+        /[^"\\]+/,           // String content (not " or \)
+        /\\[0-7]{1,3}/,      // Octal escape: \0, \177
+        /\\x[0-9a-fA-F]{1,2}/, // Hex escape: \x1B, \xFF
+        /\\./,               // Other escapes: \n, \t, \\, \"
+        /\\\r?\n/,           // Line continuation
       )),
       '"',
-    ),
+    )),
 
-    // Named node for string content (Topiary needs named nodes to preserve content)
-    string_content: $ => /[^"\\]+/,
-
-    char_literal: $ => seq(
+    // Character literal - must be higher precedence than quoted_symbol
+    // Use a token to match the entire 'x' or '\n' pattern atomically
+    char_literal: $ => token(seq(
       "'",
       choice(
         /[^'\\]/,
-        $.escape_sequence,
+        /\\./,  // escape sequence within token
       ),
       "'",
-    ),
+    )),
 
     escape_sequence: $ => token.immediate(seq(
       '\\',
       choice(
-        /['"\\abfnrtv]/,
-        /[0-7]{1,3}/,
-        /x[0-9a-fA-F]{1,2}/,
+        /[0-7]{1,3}/,           // Octal: \0, \177, etc.
+        /x[0-9a-fA-F]{1,2}/,    // Hex: \x1B, \xFF, etc.
+        /./,                     // Any other char: \n, \t, \|, etc.
       ),
     )),
 

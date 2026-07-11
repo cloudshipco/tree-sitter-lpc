@@ -1,0 +1,173 @@
+================================================================================
+Pragma directive
+================================================================================
+
+#pragma save_types
+void f() { }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (preproc_pragma
+    (preproc_arg))
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement)))
+
+================================================================================
+Catch expression - simple
+================================================================================
+
+void f() { err = catch(dangerous()); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (catch_expression
+            (call_expression
+              (identifier))))))))
+
+================================================================================
+Catch expression with semicolon
+================================================================================
+
+void f() { err = catch(dangerous();); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (catch_expression
+            (call_expression
+              (identifier))))))))
+
+================================================================================
+Catch expression with modifiers
+================================================================================
+
+void f() { err = catch(dangerous(); nolog); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (catch_expression
+            (call_expression
+              (identifier))
+            (catch_modifiers)))))))
+
+================================================================================
+Quoted symbol in array
+================================================================================
+
+void f() { x = ({'a, 'foo}); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (array_literal
+            (array_open)
+            (quoted_symbol)
+            (quoted_symbol)
+            (array_close)))))))
+
+================================================================================
+Char literal vs quoted symbol
+================================================================================
+
+void f() {
+  x = 'a';
+  y = 'abc;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (char_literal)))
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (quoted_symbol))))))
+
+================================================================================
+Inline closure (function literal)
+================================================================================
+
+void f() {
+  x = filter(arr, function int(object o) {
+    return objectp(o);
+  });
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (call_expression
+            (identifier)
+            (identifier)
+            (inline_closure
+              (type_specifier)
+              (parameter_list
+                (parameter_declaration
+                  (type_specifier)
+                  (identifier)))
+              (compound_statement
+                (return_statement
+                  (call_expression
+                    (identifier)
+                    (identifier)))))))))))
