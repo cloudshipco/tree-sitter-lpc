@@ -45,7 +45,7 @@ Create a tree-sitter grammar for LPC (LDMud flavor) and a Topiary-based auto-for
 
 ## Phase 5: Testing [IN PROGRESS]
 
-Current results on dragonheart codebase:
+Current results against a real mudlib:
 - cmds/std: 70/103 files (68%) zero errors
 - cmds/wiz: 53/88 files (60%)
 - inherit: 8/27 files (30%)
@@ -72,7 +72,7 @@ cat file.c | topiary format --configuration .topiary/languages.ncl --query queri
 
 ## Success Criteria
 
-1. `tree-sitter parse` succeeds on 90%+ of dragonheart .c files
+1. `tree-sitter parse` succeeds on 90%+ of the mudlib's .c files
 2. Topiary produces consistent, readable output
 3. Formatted code compiles without errors in LDMud
 
@@ -81,4 +81,4 @@ cat file.c | topiary format --configuration .topiary/languages.ncl --query queri
 - [Tree-sitter docs](https://tree-sitter.github.io/tree-sitter/)
 - [Topiary docs](https://topiary.tweag.io/book/)
 - [yacc-to-tree-sitter](https://github.com/miks1965/yacc-to-tree-sitter)
-- LDMud grammar: `~/Code/dragonheart/ldmud/src/prolang.y`
+- LDMud grammar: `<ldmud>/src/prolang.y` (from an LDMud source checkout)

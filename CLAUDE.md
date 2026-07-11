@@ -102,7 +102,7 @@ vim.api.nvim_create_autocmd("FileType", {
   callback = function()
     vim.lsp.start({
       name = "lpc",
-      cmd = { "node", vim.fn.expand("~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
+      cmd = { "node", vim.fn.expand("~/path/to/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
       root_dir = vim.fn.getcwd(),
     })
   end,
@@ -124,18 +124,18 @@ cd lsp && npm install && npm run build
    tree-sitter build --wasm                                    # for lpc-fmt / LSP
    cc -shared -fPIC -arch arm64 -I src src/parser.c -o libtree-sitter-lpc.dylib  # for Topiary (arm64 Mac)
    ```
-   The `-arch arm64` is required on an Arm Mac because the agent's Bash tool
-   runs under Rosetta; without it the dylib builds x86_64 and Topiary can't
-   load it.
+   On an Arm Mac, pass `-arch arm64` explicitly if your shell may be running
+   under Rosetta — otherwise the dylib builds as x86_64 and Topiary (arm64)
+   can't load it.
 4. Test with `tree-sitter parse` on real LPC files
 5. Add test cases to `test/corpus/`
 6. Run `tree-sitter test` and `node test/formatter/test-formatter.js`
 
 ## Source Grammar
 
-Based on LDMud's yacc grammar:
-- `/Users/jamespickard/Code/dragonheart/ldmud/src/prolang.y` (23k lines)
-- `/Users/jamespickard/Code/dragonheart/ldmud/src/lex.c` (lexer, 9k lines)
+Based on LDMud's yacc grammar (from an LDMud source checkout):
+- `<ldmud>/src/prolang.y` (23k lines)
+- `<ldmud>/src/lex.c` (lexer, 9k lines)
 
 ## LPC-Specific Syntax
 
@@ -152,8 +152,7 @@ Key constructs that differ from standard C:
 
 ## Test Files
 
-Real LPC files for testing (from dragonheart):
-- `libs/orderandchaos/inherit/room.c` - Room base class
-- `libs/orderandchaos/inherit/living.c` - NPC/player base
-- `libs/orderandchaos/cmds/std/look.c` - Simple command
-- `libs/orderandchaos/secure/simul_efun.c` - Complex file
+Synthetic LPC fixtures live in `test/` and `test/corpus/`. For broader
+smoke-testing, point `lpc-fmt` at a real mudlib checkout — good stress cases
+are the room/living base classes (deep inheritance), a simple command file,
+and a simul_efun (large, preprocessor-heavy).

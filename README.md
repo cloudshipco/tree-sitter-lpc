@@ -136,7 +136,7 @@ vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   callback = function()
     -- Only set filetype to lpc for files in your MUD directories
     local path = vim.fn.expand("%:p")
-    if path:match("dragonheart") or path:match("mudlib") then
+    if path:match("mudlib") or path:match("your%-mud%-dir") then
       vim.bo.filetype = "lpc"
     end
   end,
@@ -147,7 +147,7 @@ vim.api.nvim_create_autocmd("FileType", {
   callback = function()
     vim.lsp.start({
       name = "lpc-lsp",
-      cmd = { "node", vim.fn.expand("~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
+      cmd = { "node", vim.fn.expand("~/path/to/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
       root_dir = vim.fn.getcwd(),
     })
   end,

@@ -37,9 +37,10 @@ let topiaryConfigPath = "";
 let topiaryQueryPath = "";
 
 connection.onInitialize(async (params: InitializeParams) => {
-  // Default paths (can be overridden via settings)
-  const homeDir = process.env.HOME || "";
-  treeSitterLpcPath = path.join(homeDir, "Code/cloudship/tree-sitter-lpc");
+  // Resolve the repo root from this module's location (dist/ -> lsp/ -> root)
+  // so any checkout works; TREE_SITTER_LPC_PATH overrides it. See issue #4.
+  treeSitterLpcPath =
+    process.env.TREE_SITTER_LPC_PATH || path.join(__dirname, "..", "..");
   topiaryConfigPath = path.join(treeSitterLpcPath, ".topiary/languages.ncl");
   topiaryQueryPath = path.join(treeSitterLpcPath, "queries/formatting.scm");
 
