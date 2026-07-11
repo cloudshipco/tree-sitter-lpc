@@ -1,5 +1,11 @@
 -- Neovim tree-sitter + LSP setup for LPC
--- Add this to your Neovim config (init.lua or similar)
+--
+-- INSTALLATION:
+-- 1. Copy this file's contents to your Neovim config
+-- 2. Replace <TREE_SITTER_LPC_PATH> with your actual path
+-- 3. Run :TSInstall lpc (after restarting Neovim)
+-- 4. For highlighting: copy queries/highlights.scm to:
+--    ~/.config/nvim/queries/lpc/highlights.scm
 
 -- ============================================
 -- TREE-SITTER SETUP
@@ -9,7 +15,7 @@ local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
 
 parser_config.lpc = {
   install_info = {
-    url = "~/Code/cloudship/tree-sitter-lpc", -- or your path
+    url = "<TREE_SITTER_LPC_PATH>", -- e.g., "~/Code/tree-sitter-lpc"
     files = { "src/parser.c" },
     branch = "main",
     generate_requires_npm = false,
@@ -42,7 +48,7 @@ vim.filetype.add({
 -- if not configs.lpc_ls then
 --   configs.lpc_ls = {
 --     default_config = {
---       cmd = { "node", vim.fn.expand("~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
+--       cmd = { "node", vim.fn.expand("<TREE_SITTER_LPC_PATH>/lsp/dist/server.js"), "--stdio" },
 --       filetypes = { "lpc" },
 --       root_dir = function(fname)
 --         return lspconfig.util.find_git_ancestor(fname) or vim.fn.getcwd()
@@ -59,7 +65,7 @@ vim.api.nvim_create_autocmd("FileType", {
   callback = function()
     vim.lsp.start({
       name = "lpc-language-server",
-      cmd = { "node", vim.fn.expand("~/Code/cloudship/tree-sitter-lpc/lsp/dist/server.js"), "--stdio" },
+      cmd = { "node", vim.fn.expand("<TREE_SITTER_LPC_PATH>/lsp/dist/server.js"), "--stdio" },
       root_dir = vim.fs.dirname(vim.fs.find({ ".git", "mudlib" }, { upward = true })[1]),
     })
   end,

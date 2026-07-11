@@ -45,13 +45,13 @@ connection.onInitialize(async (params: InitializeParams) => {
 
   // Initialize tree-sitter
   try {
-    const TreeSitter = require("web-tree-sitter");
-    await TreeSitter.init();
+    const { Parser, Language } = require("web-tree-sitter");
+    await Parser.init();
 
     const wasmPath = path.join(treeSitterLpcPath, "tree-sitter-lpc.wasm");
     if (fs.existsSync(wasmPath)) {
-      const LPC = await TreeSitter.Language.load(wasmPath);
-      parser = new TreeSitter();
+      const LPC = await Language.load(wasmPath);
+      parser = new Parser();
       parser.setLanguage(LPC);
       connection.console.log("Tree-sitter LPC parser initialized");
     } else {
