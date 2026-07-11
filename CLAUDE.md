@@ -118,9 +118,18 @@ cd lsp && npm install && npm run build
 
 1. Edit `grammar.js`
 2. Run `tree-sitter generate`
-3. Test with `tree-sitter parse` on real LPC files
-4. Add test cases to `test/corpus/`
-5. Run `tree-sitter test`
+3. **Rebuild the artifacts the tools load** (all gitignored, so a stale one
+   silently keeps the OLD grammar — see issue #3):
+   ```bash
+   tree-sitter build --wasm                                    # for lpc-fmt / LSP
+   cc -shared -fPIC -arch arm64 -I src src/parser.c -o libtree-sitter-lpc.dylib  # for Topiary (arm64 Mac)
+   ```
+   The `-arch arm64` is required on an Arm Mac because the agent's Bash tool
+   runs under Rosetta; without it the dylib builds x86_64 and Topiary can't
+   load it.
+4. Test with `tree-sitter parse` on real LPC files
+5. Add test cases to `test/corpus/`
+6. Run `tree-sitter test` and `node test/formatter/test-formatter.js`
 
 ## Source Grammar
 
