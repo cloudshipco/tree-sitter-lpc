@@ -63,10 +63,17 @@ The `bin/lpc-fmt` CLI wraps Topiary with additional transforms:
 - Convert implicit string concat to explicit: `"a" "b"` → `"a" + "b"`
 - Add braces to single-statement if/while/for/foreach
 - Add blank lines before return statements
-- Add blank lines after block statements (if/while/for/switch)
+- Add blank lines before and after block statements (if/while/for/switch)
+- Protect backslash-newline continuations in strings with a placeholder
 
 **Post-processing (after Topiary):**
 - Fix continuation line indentation for multi-line expressions
+- Restore string line continuations from the placeholder
+
+**CLI extras:** accepts directories (recursive over `*.c`, parallel format
+with progress bar), `check` reports warnings (e.g. non-standard string
+escapes) with `--level`/`-q`/`-o` options, and files with preprocessor
+directives inside function bodies are skipped as unsafe to format.
 
 **Formatting style:**
 - 2-space indentation

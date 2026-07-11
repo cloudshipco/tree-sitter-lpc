@@ -17,7 +17,12 @@ A [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for LPC (Lar
     - Closure arguments `$1`, `$2`, etc.
     - Range subscripts `array[0..5]`
     - Case ranges `case 1..10:`
-  - Preprocessor directives (`#include`, `#define`, `#ifdef`, etc.)
+    - Union types `object|int *find(string|int key)`
+    - Default parameter values `void f(int x = 1)`
+    - `foreach` variants (inferred type, key/value pairs, multi-value mappings)
+    - `catch` expressions (including modifiers like `catch(expr; publish)`)
+  - Preprocessor directives (`#include`, `#define`, `#ifdef`, `#pragma`, etc.),
+    including multi-line `#define` with backslash continuations
 
 ## Installation
 
@@ -50,8 +55,11 @@ cc -shared -fPIC -I src src/parser.c -o libtree-sitter-lpc.so     # Linux
 Format and check LPC files:
 
 ```bash
-# Check syntax
+# Check syntax (errors and warnings)
 ./bin/lpc-fmt check file.c
+
+# Check a whole directory recursively, errors only, report to a file
+./bin/lpc-fmt check -q -o report.txt src/
 
 # Format to stdout
 ./bin/lpc-fmt format file.c
@@ -59,9 +67,25 @@ Format and check LPC files:
 # Format in place
 ./bin/lpc-fmt format -w file.c
 
+# Format a whole directory in place (parallel, with progress bar)
+./bin/lpc-fmt format -w src/
+
 # Format from stdin
 cat file.c | ./bin/lpc-fmt format
 ```
+
+Options:
+
+- `-w, --write` — write formatted output back to the file
+- `--level=error|warning` — minimum level to report (default: `warning`)
+- `-q, --quiet` — errors only (same as `--level=error`)
+- `-o, --output=FILE` — write the check report to a file
+- `--no-progress` — disable the progress indicator
+
+`check` reports parse errors with context (e.g. ``Unexpected `foo` in function
+definition``) plus warnings such as non-standard string escape sequences.
+Files with preprocessor directives inside function bodies are skipped by
+`format` — they can't be formatted safely.
 
 ### tree-sitter parse
 
@@ -80,10 +104,13 @@ The formatter applies:
 - **Spaces after keywords**: `if (`, `for (`, `return `
 - **Spaces after commas**: `foo(a, b, c)`
 - **Braces on control statements**: Single-statement `if`/`while`/`for` get braces
-- **Blank lines**: After block statements, before `return`
+- **Blank lines**: After block statements, before `return`, and before block
+  statements (`if`/`while`/`for`/`switch`) that follow a plain statement
 - **Case body indentation**: Code inside `case:` is indented
 - **Array/mapping spacing**: `({ 1, 2, 3 })` preserves internal spaces
+- **Multi-line preservation**: Arrays/mappings written across multiple lines stay multi-line
 - **String concatenation**: Implicit `"a" "b"` becomes explicit `"a" + "b"`
+- **Line continuations**: Backslash-newline inside strings is preserved
 
 ## Language Server (LSP)
 
@@ -126,6 +153,12 @@ vim.api.nvim_create_autocmd("FileType", {
 
 ## Testing
 
+Run the grammar corpus tests (in `test/corpus/`):
+
+```bash
+npx tree-sitter test
+```
+
 Run the formatter test suite:
 
 ```bash
@@ -146,6 +179,7 @@ tree-sitter-lpc/
 ├── lsp/
 │   └── src/server.ts       # Language server
 ├── test/
+│   ├── corpus/             # Grammar test cases (tree-sitter test)
 │   └── formatter/          # Formatter test suite
 ├── .topiary/
 │   └── languages.ncl       # Topiary language configuration
@@ -157,6 +191,8 @@ tree-sitter-lpc/
 - ANSI color macro concatenation patterns (`RED_F"text"`) are not supported
   (these are invalid in recent LDMud versions anyway)
 - Some complex preprocessor usage may not parse correctly
+- Files with preprocessor conditionals inside function bodies are skipped by
+  the formatter (reformatting around `#ifdef` branches isn't safe)
 - No semantic analysis (type checking, unused variable detection)
 
 ## Future Ideas
