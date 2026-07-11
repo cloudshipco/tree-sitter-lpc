@@ -464,6 +464,18 @@ testIdempotent("deeply nested single-statement ifs (12 levels)",
 testIdempotent("mixed block statements and returns",
   `void f() { x = 1; while (x) if (y) a(); return x; }`);
 
+test("comment between continuation lines keeps continuation indent",
+  `void f() {
+  x = aaaa +
+  /* note */
+  bbbb;
+}`,
+  `void f() {
+  x = aaaa +
+  /* note */
+    bbbb;
+}`);
+
 // Summary
 console.log("\n=== Results ===");
 console.log(`Passed: ${passed}`);
