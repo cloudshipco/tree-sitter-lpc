@@ -164,6 +164,26 @@ test("no extra blank line when already present",
   b();
 }`);
 
+test("blank line before for loop",
+  `void f() { string x; for (int i = 0; i < 10; i++) { a(); } }`,
+  `void f() {
+  string x;
+
+  for (int i = 0; i < 10; i++) {
+    a();
+  }
+}`);
+
+test("blank line before while loop",
+  `void f() { x = 1; while (x) { a(); } }`,
+  `void f() {
+  x = 1;
+
+  while (x) {
+    a();
+  }
+}`);
+
 // Multi-line preservation tests
 console.log("\nMulti-line Preservation:");
 

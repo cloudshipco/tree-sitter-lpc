@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-const { execSync } = require("child_process");
+const { execSync, exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 // Find tree-sitter-lpc directory
 const ROOT = path.dirname(__dirname);
@@ -17,9 +18,12 @@ const WASM_PATH = path.join(ROOT, "tree-sitter-lpc.wasm");
 // Import shared transform functions
 const {
   transformCode,
+  preProcessLineContinuations,
+  postProcessLineContinuations,
   postProcessContinuationIndent,
   postProcessCaseIndent,
   checkSyntax,
+  checkWarnings,
 } = require(path.join(ROOT, "lib/transform.js"));
 
 let parser;
@@ -28,26 +32,130 @@ let initialized = false;
 async function initParser() {
   if (initialized) return;
 
-  const TreeSitter = require("web-tree-sitter");
-  await TreeSitter.init();
+  const { Parser, Language } = require("web-tree-sitter");
+  await Parser.init();
 
-  const LPC = await TreeSitter.Language.load(WASM_PATH);
-  parser = new TreeSitter();
+  const LPC = await Language.load(WASM_PATH);
+  parser = new Parser();
   parser.setLanguage(LPC);
   initialized = true;
 }
 
-// Format with Topiary
-function formatWithTopiary(text) {
-  return execSync(
-    `topiary format --configuration "${TOPIARY_CONFIG}" --query "${TOPIARY_QUERY}" --language lpc`,
-    {
-      input: text,
-      encoding: "utf-8",
-      maxBuffer: 10 * 1024 * 1024,
-      cwd: ROOT,
+// Format with Topiary (sync)
+function formatWithTopiary(text, filename = "<stdin>") {
+  try {
+    return execSync(
+      `topiary format --configuration "${TOPIARY_CONFIG}" --query "${TOPIARY_QUERY}" --language lpc`,
+      {
+        input: text,
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+        cwd: ROOT,
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+  } catch (e) {
+    // Add filename to error message
+    const stderr = e.stderr ? e.stderr.toString() : "";
+    throw new Error(`Error formatting ${filename}:\n${stderr}`);
+  }
+}
+
+// Format with Topiary (async)
+function formatWithTopiaryAsync(text, filename = "<stdin>") {
+  return new Promise((resolve, reject) => {
+    const child = exec(
+      `topiary format --configuration "${TOPIARY_CONFIG}" --query "${TOPIARY_QUERY}" --language lpc`,
+      {
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+        cwd: ROOT,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(`Error formatting ${filename}:\n${stderr}`));
+        } else {
+          resolve(stdout);
+        }
+      }
+    );
+    child.stdin.write(text);
+    child.stdin.end();
+  });
+}
+
+// Recursively find all .c files in a directory
+function findLpcFiles(dir, files = []) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // Skip hidden directories and common non-source directories
+      if (!entry.name.startsWith(".") && entry.name !== "node_modules") {
+        findLpcFiles(fullPath, files);
+      }
+    } else if (entry.isFile() && entry.name.endsWith(".c")) {
+      files.push(fullPath);
     }
-  );
+  }
+  return files;
+}
+
+// Check if file has preprocessor directives inside function bodies
+// These can't be formatted safely, so we skip them
+function hasNestedPreprocessor(text) {
+  // Find position of first opening brace (start of function body)
+  const firstBrace = text.indexOf("{");
+  if (firstBrace === -1) {
+    return false;
+  }
+
+  // Check if any preprocessor directive appears after first brace
+  const afterBrace = text.substring(firstBrace);
+  if (/^#\s*(if|ifdef|ifndef|else|elif|endif)\b/m.test(afterBrace)) {
+    return true;
+  }
+
+  // Also check for indented preprocessor directives anywhere
+  if (/^\s+#\s*(if|ifdef|ifndef|else|elif|endif|define|undef)\b/m.test(text)) {
+    return true;
+  }
+
+  return false;
+}
+
+// Run tasks with limited concurrency
+async function parallelLimit(tasks, limit) {
+  const results = [];
+  const executing = new Set();
+
+  for (const task of tasks) {
+    const promise = task().then(result => {
+      executing.delete(promise);
+      return result;
+    });
+    results.push(promise);
+    executing.add(promise);
+
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+
+  return Promise.all(results);
+}
+
+// Progress indicator
+function showProgress(current, total, file, isTerminal) {
+  if (!isTerminal) return;
+  const percent = Math.round((current / total) * 100);
+  const bar = "=".repeat(Math.floor(percent / 5)).padEnd(20);
+  process.stderr.write(`\r[${bar}] ${percent}% (${current}/${total}) ${path.basename(file).slice(0, 30).padEnd(30)}`);
+}
+
+function clearProgress(isTerminal) {
+  if (!isTerminal) return;
+  process.stderr.write("\r" + " ".repeat(80) + "\r");
 }
 
 // Main
@@ -55,50 +163,159 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-    console.log(`Usage: lpc-fmt [command] [options] [file...]
+    console.log(`Usage: lpc-fmt [command] [options] [file|directory...]
 
 Commands:
-  check       Check syntax (report errors)
+  check       Check syntax (report errors and warnings)
   format      Format code (transform + topiary)
 
 Options:
-  -w, --write    Write formatted output back to file (format only)
-  -h, --help     Show this help
+  -w, --write       Write formatted output back to file (format only, parallel)
+  --level=LEVEL     Minimum level to report: error, warning (default: warning)
+  -q, --quiet       Only report errors (same as --level=error)
+  -o, --output=FILE Write report to FILE instead of stdout
+  --no-progress     Disable progress indicator
+  -h, --help        Show this help
 
 Examples:
-  lpc-fmt check file.c           Check file for syntax errors
-  lpc-fmt format file.c          Print formatted code to stdout
-  lpc-fmt format -w file.c       Format file in place
-  cat file.c | lpc-fmt format    Format from stdin`);
+  lpc-fmt check file.c              Check file for errors and warnings
+  lpc-fmt check src/                Check all .c files in directory recursively
+  lpc-fmt check -q file.c           Check file for errors only
+  lpc-fmt check -o report.txt .     Check current dir, write report to file
+  lpc-fmt format file.c             Print formatted code to stdout
+  lpc-fmt format -w file.c          Format file in place
+  lpc-fmt format -w src/            Format all .c files in directory (parallel)
+  cat file.c | lpc-fmt format       Format from stdin`);
     process.exit(0);
   }
 
   const command = args[0];
   const writeInPlace = args.includes("-w") || args.includes("--write");
-  const files = args.filter(a => !a.startsWith("-") && a !== command);
+  const quiet = args.includes("-q") || args.includes("--quiet");
+  const noProgress = args.includes("--no-progress");
+  const levelArg = args.find(a => a.startsWith("--level="));
+  const level = quiet ? "error" : (levelArg ? levelArg.split("=")[1] : "warning");
+  const showWarnings = level !== "error";
+
+  // Parse output file option
+  let outputFile = null;
+  const outputArgLong = args.find(a => a.startsWith("--output="));
+  const outputArgShortIdx = args.indexOf("-o");
+  if (outputArgLong) {
+    outputFile = outputArgLong.split("=")[1];
+  } else if (outputArgShortIdx !== -1 && args[outputArgShortIdx + 1]) {
+    outputFile = args[outputArgShortIdx + 1];
+  }
+
+  // Get file/directory arguments
+  let inputs = args.filter((a, i) => {
+    if (a.startsWith("-") || a.startsWith("--") || a === command) return false;
+    // Skip the argument after -o (it's the output file)
+    if (outputArgShortIdx !== -1 && i === outputArgShortIdx + 1) return false;
+    return true;
+  });
 
   await initParser();
 
+  // Expand directories to file lists
+  let files = [];
+  for (const input of inputs) {
+    if (fs.existsSync(input)) {
+      const stat = fs.statSync(input);
+      if (stat.isDirectory()) {
+        files.push(...findLpcFiles(input));
+      } else {
+        files.push(input);
+      }
+    } else {
+      console.error(`Error: ${input} not found`);
+      process.exit(1);
+    }
+  }
+
+  // Determine if we should show progress (terminal + multiple files + not piping output)
+  const isTerminal = process.stderr.isTTY && !noProgress;
+  const showProgressBar = isTerminal && files.length > 1;
+
   if (command === "check") {
     let hasErrors = false;
+    let errorCount = 0;
+    let warningCount = 0;
+    const output = [];
+
+    const addDiagnostic = (d, level = "error") => {
+      let msg = `${d.file}:${d.line}:${d.column}: ${level}: ${d.message}`;
+      if (d.sourceLine) {
+        msg += `\n  ${d.sourceLine}`;
+        const pointer = " ".repeat(d.column - 1) + "^";
+        msg += `\n  ${pointer}`;
+      }
+      output.push(msg);
+    };
 
     if (files.length === 0) {
       // Read from stdin
       const text = fs.readFileSync(0, "utf-8");
       const errors = checkSyntax(text, "<stdin>", parser);
       for (const e of errors) {
-        console.log(`${e.file}:${e.line}:${e.column}: ${e.message}`);
+        addDiagnostic(e, "error");
         hasErrors = true;
+        errorCount++;
       }
-    } else {
-      for (const file of files) {
-        const text = fs.readFileSync(file, "utf-8");
-        const errors = checkSyntax(text, file, parser);
-        for (const e of errors) {
-          console.log(`${e.file}:${e.line}:${e.column}: ${e.message}`);
-          hasErrors = true;
+      if (showWarnings) {
+        const warnings = checkWarnings(text, "<stdin>", parser);
+        for (const w of warnings) {
+          addDiagnostic(w, "warning");
+          warningCount++;
         }
       }
+    } else {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (showProgressBar) {
+          showProgress(i + 1, files.length, file, isTerminal);
+        }
+
+        try {
+          const text = fs.readFileSync(file, "utf-8");
+          const errors = checkSyntax(text, file, parser);
+          for (const e of errors) {
+            addDiagnostic(e, "error");
+            hasErrors = true;
+            errorCount++;
+          }
+          if (showWarnings) {
+            const warnings = checkWarnings(text, file, parser);
+            for (const w of warnings) {
+              addDiagnostic(w, "warning");
+              warningCount++;
+            }
+          }
+        } catch (err) {
+          addDiagnostic({ file, line: 1, column: 1, message: err.message }, "error");
+          hasErrors = true;
+          errorCount++;
+        }
+      }
+
+      if (showProgressBar) {
+        clearProgress(isTerminal);
+      }
+    }
+
+    // Add summary if checking multiple files
+    if (files.length > 1) {
+      output.push("");
+      output.push(`Checked ${files.length} files: ${errorCount} error(s), ${warningCount} warning(s)`);
+    }
+
+    // Write output
+    const report = output.join("\n");
+    if (outputFile) {
+      fs.writeFileSync(outputFile, report + "\n");
+      console.error(`Report written to ${outputFile}`);
+    } else {
+      if (report) console.log(report);
     }
 
     process.exit(hasErrors ? 1 : 0);
@@ -106,25 +323,104 @@ Examples:
     if (files.length === 0) {
       // Read from stdin
       const text = fs.readFileSync(0, "utf-8");
+
+      // Check for nested preprocessor directives
+      if (hasNestedPreprocessor(text)) {
+        console.error("Error: Cannot format code with nested preprocessor directives");
+        process.exit(1);
+      }
+
       const transformed = transformCode(text, parser);
-      const formatted = formatWithTopiary(transformed);
-      const withCaseIndent = postProcessCaseIndent(formatted);
+      const withPlaceholders = preProcessLineContinuations(transformed, parser);
+      const formatted = formatWithTopiary(withPlaceholders, "<stdin>");
+      const withLineCont = postProcessLineContinuations(formatted);
+      const withCaseIndent = postProcessCaseIndent(withLineCont);
       const postProcessed = postProcessContinuationIndent(withCaseIndent);
       process.stdout.write(postProcessed);
-    } else {
-      for (const file of files) {
-        const text = fs.readFileSync(file, "utf-8");
-        const transformed = transformCode(text, parser);
-        const formatted = formatWithTopiary(transformed);
-        const withCaseIndent = postProcessCaseIndent(formatted);
-        const postProcessed = postProcessContinuationIndent(withCaseIndent);
+    } else if (writeInPlace) {
+      // Parallel processing for write-in-place mode
+      const concurrency = os.cpus().length;
+      let completed = 0;
+      let skipped = 0;
+      let errors = [];
+      let skippedFiles = [];
 
-        if (writeInPlace) {
+      const tasks = files.map(file => async () => {
+        try {
+          const text = fs.readFileSync(file, "utf-8");
+
+          // Skip files with nested preprocessor directives
+          if (hasNestedPreprocessor(text)) {
+            skipped++;
+            skippedFiles.push(file);
+            completed++;
+            if (showProgressBar) {
+              showProgress(completed, files.length, file, isTerminal);
+            }
+            return;
+          }
+
+          const transformed = transformCode(text, parser);
+          const withPlaceholders = preProcessLineContinuations(transformed, parser);
+          const formatted = await formatWithTopiaryAsync(withPlaceholders, file);
+          const withLineCont = postProcessLineContinuations(formatted);
+          const withCaseIndent = postProcessCaseIndent(withLineCont);
+          const postProcessed = postProcessContinuationIndent(withCaseIndent);
           fs.writeFileSync(file, postProcessed);
-          console.log(`Formatted: ${file}`);
-        } else {
-          process.stdout.write(postProcessed);
+        } catch (e) {
+          errors.push(e.message);
         }
+        completed++;
+        if (showProgressBar) {
+          showProgress(completed, files.length, file, isTerminal);
+        }
+      });
+
+      await parallelLimit(tasks, concurrency);
+
+      if (showProgressBar) {
+        clearProgress(isTerminal);
+        const formatted = files.length - skipped;
+        if (skipped > 0) {
+          console.error(`Formatted ${formatted} files, skipped ${skipped} (nested preprocessor) using ${concurrency} workers`);
+        } else {
+          console.error(`Formatted ${files.length} files using ${concurrency} workers`);
+        }
+      }
+
+      if (errors.length > 0) {
+        for (const err of errors) {
+          console.error(err);
+        }
+        process.exit(1);
+      }
+    } else {
+      // Sequential processing for stdout mode (order matters)
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (showProgressBar) {
+          showProgress(i + 1, files.length, file, isTerminal);
+        }
+
+        const text = fs.readFileSync(file, "utf-8");
+
+        // Skip files with nested preprocessor directives
+        if (hasNestedPreprocessor(text)) {
+          console.error(`Skipping ${file}: nested preprocessor directives`);
+          continue;
+        }
+
+        const transformed = transformCode(text, parser);
+        const withPlaceholders = preProcessLineContinuations(transformed, parser);
+        const formatted = formatWithTopiary(withPlaceholders, file);
+        const withLineCont = postProcessLineContinuations(formatted);
+        const withCaseIndent = postProcessCaseIndent(withLineCont);
+        const postProcessed = postProcessContinuationIndent(withCaseIndent);
+        process.stdout.write(postProcessed);
+      }
+
+      if (showProgressBar) {
+        clearProgress(isTerminal);
       }
     }
   } else {
