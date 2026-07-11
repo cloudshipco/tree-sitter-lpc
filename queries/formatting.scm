@@ -12,26 +12,10 @@
 ; TOP-LEVEL SPACING
 ; ============================================
 
-; Blank line before function definitions
-; Explicit node types (not (_)) so a doc comment directly above a function
-; does not get a blank line inserted after it
-(
-  [
-    (function_definition)
-    (function_declaration)
-    (declaration)
-    (inherit_statement)
-    (preproc_include)
-    (preproc_define)
-    (preproc_ifdef)
-    (preproc_if)
-    (preproc_undef)
-    (preproc_pragma)
-  ] @append_delimiter
-  .
-  (function_definition)
-  (#delimiter! "\n")
-)
+; Blank line before function definitions is INSERTED by transformStructural
+; (lib/transform.js), before the function's attached doc-comment group so
+; comments stay glued to their functions. Here we only PRESERVE it.
+(function_definition) @allow_blank_line_before
 (function_definition) @append_hardline
 (function_declaration) @append_hardline
 

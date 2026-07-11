@@ -22,15 +22,7 @@ import * as fs from "fs";
 
 // Import shared transform functions
 const transformModule = require("../../lib/transform.js");
-const {
-  transformCode,
-  preProcessLineContinuations,
-  postProcessLineContinuations,
-  postProcessContinuationIndent,
-  postProcessCaseIndent,
-  checkSyntax,
-  hasNestedPreprocessor,
-} = transformModule;
+const { formatText, NestedPreprocessorError, checkSyntax } = transformModule;
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -119,19 +111,12 @@ connection.onDocumentFormatting(
       return [];
     }
 
-    // Same guard as the CLI: directives inside function bodies can't be
-    // reformatted safely (Topiary would move them off column 1)
-    if (hasNestedPreprocessor(document.getText(), parser)) {
-      connection.console.warn(
-        "Not formatting: preprocessor directives inside function bodies"
-      );
+    // Fail CLOSED: without a parser none of the safety guards can run, so
+    // refuse to format rather than hand Topiary an unguarded file
+    if (!parser) {
+      connection.console.warn("Not formatting: tree-sitter parser not initialized");
       return [];
     }
-
-    // Transform code first (add braces, blank lines, explicit +),
-    // then protect string line continuations from Topiary
-    const transformed = transformCode(document.getText(), parser);
-    const text = preProcessLineContinuations(transformed, parser);
 
     try {
       // Check if topiary is available
@@ -148,22 +133,22 @@ connection.onDocumentFormatting(
     }
 
     try {
-      // Run topiary from tree-sitter-lpc directory so relative paths work
-      const formatted = execSync(
-        `topiary format --configuration "${topiaryConfigPath}" --query "${topiaryQueryPath}" --language lpc`,
-        {
-          input: text,
-          encoding: "utf-8",
-          maxBuffer: 10 * 1024 * 1024, // 10MB
-          cwd: treeSitterLpcPath, // Run from tree-sitter-lpc dir
-        }
+      // The pipeline is shared with bin/lpc-fmt (lib/transform.js); only
+      // the Topiary invocation is ours
+      const postProcessed = await formatText(
+        document.getText(),
+        parser,
+        (text: string) =>
+          execSync(
+            `topiary format --configuration "${topiaryConfigPath}" --query "${topiaryQueryPath}" --language lpc`,
+            {
+              input: text,
+              encoding: "utf-8",
+              maxBuffer: 10 * 1024 * 1024, // 10MB
+              cwd: treeSitterLpcPath, // Run from tree-sitter-lpc dir
+            }
+          )
       );
-
-      // Post-process: restore line continuations, then fix case body and
-      // continuation indentation (same order as bin/lpc-fmt)
-      const withLineCont = postProcessLineContinuations(formatted);
-      const withCaseIndent = postProcessCaseIndent(withLineCont);
-      const postProcessed = postProcessContinuationIndent(withCaseIndent);
 
       // Return full document replacement
       const lastChar = document.getText().length;
@@ -175,7 +160,13 @@ connection.onDocumentFormatting(
         ),
       ];
     } catch (e: any) {
-      connection.console.error(`Formatting failed: ${e.message}`);
+      if (e instanceof NestedPreprocessorError) {
+        connection.console.warn(
+          "Not formatting: preprocessor directives inside function bodies"
+        );
+      } else {
+        connection.console.error(`Formatting failed: ${e.message}`);
+      }
       return [];
     }
   }

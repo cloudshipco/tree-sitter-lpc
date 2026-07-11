@@ -59,14 +59,19 @@ topiary format --language lpc path/to/file.c
 
 The `bin/lpc-fmt` CLI wraps Topiary with additional transforms:
 
+The whole pipeline lives in `formatText()` (lib/transform.js) and is shared
+by the CLI and the LSP — change it there, not in the callers.
+
 **Transforms applied (before Topiary):**
 - Convert implicit string concat to explicit: `"a" "b"` → `"a" + "b"`
-- Add braces to single-statement if/while/for/foreach
-- Add blank lines before return statements
-- Add blank lines before and after block statements (if/while/for/switch)
+- Add braces to single-statement if/while/for/foreach (any nesting depth)
+- Add blank lines before return statements and before/after block
+  statements (if/while/for/switch) — except directly after a `case` label
+- Add blank line before each top-level function's doc-comment group
 - Protect backslash-newline continuations in strings with a placeholder
 
 **Post-processing (after Topiary):**
+- Indent case bodies (brace-depth based; string content never touched)
 - Fix continuation line indentation for multi-line expressions
 - Restore string line continuations from the placeholder
 

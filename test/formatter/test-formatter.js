@@ -372,6 +372,98 @@ test("char literal with octal escape",
   x = '\\033';
 }`);
 
+// Regression tests from the second review pass (formatText extraction round)
+console.log("\nReview Regressions (round 2):");
+
+function testIdempotent(name, input) {
+  try {
+    const once = execSync(`node "${LPC_FMT}" format`, { input, encoding: "utf-8", cwd: ROOT });
+    const twice = execSync(`node "${LPC_FMT}" format`, { input: once, encoding: "utf-8", cwd: ROOT });
+    if (once === twice) {
+      console.log(`✓ ${name}`);
+      passed++;
+    } else {
+      console.log(`✗ ${name} (output changed on second format)`);
+      failed++;
+    }
+  } catch (e) {
+    console.log(`✗ ${name} (error: ${e.message})`);
+    failed++;
+  }
+}
+
+test("trailing spaces inside multi-line string survive continuation indent",
+  `void f() {
+  msg = header +
+"line one${"   "}
+line two";
+}`,
+  `void f() {
+  msg = header +
+    "line one${"   "}
+line two";
+}`);
+
+test("functions separated by doc comment keep blank line",
+  `int f() {
+  return 1;
+}
+// Doc for g
+int g() {
+  return 2;
+}`,
+  `int f() {
+  return 1;
+}
+
+// Doc for g
+int g() {
+  return 2;
+}`);
+
+test("odd quote in #define does not poison case indent",
+  `#define OPEN_QUOTE "
+void f() {
+  switch (x) {
+    case 1:
+      s = "}";
+      break;
+  }
+}`,
+  `#define OPEN_QUOTE "
+
+void f() {
+  switch (x) {
+    case 1:
+      s = "}";
+      break;
+  }
+}`);
+
+test("block comment in case body is indented with the body",
+  `void f() {
+  switch (x) {
+    case 1:
+      /* explain */
+      do_thing();
+      break;
+  }
+}`,
+  `void f() {
+  switch (x) {
+    case 1:
+      /* explain */
+      do_thing();
+      break;
+  }
+}`);
+
+testIdempotent("deeply nested single-statement ifs (12 levels)",
+  `void f() { if (a) if (b) if (c) if (d) if (e) if (g) if (h) if (i) if (j) if (k) if (l) if (m) x(); }`);
+
+testIdempotent("mixed block statements and returns",
+  `void f() { x = 1; while (x) if (y) a(); return x; }`);
+
 // Summary
 console.log("\n=== Results ===");
 console.log(`Passed: ${passed}`);

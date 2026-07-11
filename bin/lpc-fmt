@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync, exec } = require("child_process");
+const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -17,14 +17,10 @@ const WASM_PATH = path.join(ROOT, "tree-sitter-lpc.wasm");
 
 // Import shared transform functions
 const {
-  transformCode,
-  preProcessLineContinuations,
-  postProcessLineContinuations,
-  postProcessContinuationIndent,
-  postProcessCaseIndent,
+  formatText,
+  NestedPreprocessorError,
   checkSyntax,
   checkWarnings,
-  hasNestedPreprocessor,
 } = require(path.join(ROOT, "lib/transform.js"));
 
 let parser;
@@ -42,28 +38,8 @@ async function initParser() {
   initialized = true;
 }
 
-// Format with Topiary (sync)
-function formatWithTopiary(text, filename = "<stdin>") {
-  try {
-    return execSync(
-      `topiary format --configuration "${TOPIARY_CONFIG}" --query "${TOPIARY_QUERY}" --language lpc`,
-      {
-        input: text,
-        encoding: "utf-8",
-        maxBuffer: 10 * 1024 * 1024,
-        cwd: ROOT,
-        stdio: ["pipe", "pipe", "pipe"],
-      }
-    );
-  } catch (e) {
-    // Add filename to error message
-    const stderr = e.stderr ? e.stderr.toString() : "";
-    throw new Error(`Error formatting ${filename}:\n${stderr}`);
-  }
-}
-
-// Format with Topiary (async)
-function formatWithTopiaryAsync(text, filename = "<stdin>") {
+// Format with Topiary (async child process)
+function runTopiary(text, filename = "<stdin>") {
   return new Promise((resolve, reject) => {
     const child = exec(
       `topiary format --configuration "${TOPIARY_CONFIG}" --query "${TOPIARY_QUERY}" --language lpc`,
@@ -140,12 +116,14 @@ function clearProgress(isTerminal) {
   process.stderr.write("\r" + " ".repeat(80) + "\r");
 }
 
-// Exit quietly when our stdout pipe is closed (e.g. `lpc-fmt format f.c | head`)
+// Exit quietly when our stdout pipe is closed (e.g. `lpc-fmt format f.c | head`);
+// any other stdout failure gets the normal one-line error, not a crash dump
 process.stdout.on("error", (err) => {
   if (err.code === "EPIPE") {
     process.exit(0);
   }
-  throw err;
+  console.error(`Error writing output: ${err.message}`);
+  process.exit(1);
 });
 
 // Main
@@ -321,19 +299,13 @@ Examples:
       // Read from stdin
       const text = fs.readFileSync(0, "utf-8");
 
-      // Check for nested preprocessor directives
-      if (hasNestedPreprocessor(text, parser)) {
-        console.error("Error: Cannot format code with nested preprocessor directives");
+      try {
+        const formatted = await formatText(text, parser, (t) => runTopiary(t, "<stdin>"));
+        process.stdout.write(formatted);
+      } catch (e) {
+        console.error(`Error: ${e.message}`);
         process.exit(1);
       }
-
-      const transformed = transformCode(text, parser);
-      const withPlaceholders = preProcessLineContinuations(transformed, parser);
-      const formatted = formatWithTopiary(withPlaceholders, "<stdin>");
-      const withLineCont = postProcessLineContinuations(formatted);
-      const withCaseIndent = postProcessCaseIndent(withLineCont);
-      const postProcessed = postProcessContinuationIndent(withCaseIndent);
-      process.stdout.write(postProcessed);
     } else if (writeInPlace) {
       // Parallel processing for write-in-place mode
       const concurrency = os.cpus().length;
@@ -345,27 +317,15 @@ Examples:
       const tasks = files.map(file => async () => {
         try {
           const text = fs.readFileSync(file, "utf-8");
-
-          // Skip files with nested preprocessor directives
-          if (hasNestedPreprocessor(text, parser)) {
+          const formatted = await formatText(text, parser, (t) => runTopiary(t, file));
+          fs.writeFileSync(file, formatted);
+        } catch (e) {
+          if (e instanceof NestedPreprocessorError) {
             skipped++;
             skippedFiles.push(file);
-            completed++;
-            if (showProgressBar) {
-              showProgress(completed, files.length, file, isTerminal);
-            }
-            return;
+          } else {
+            errors.push(e.message);
           }
-
-          const transformed = transformCode(text, parser);
-          const withPlaceholders = preProcessLineContinuations(transformed, parser);
-          const formatted = await formatWithTopiaryAsync(withPlaceholders, file);
-          const withLineCont = postProcessLineContinuations(formatted);
-          const withCaseIndent = postProcessCaseIndent(withLineCont);
-          const postProcessed = postProcessContinuationIndent(withCaseIndent);
-          fs.writeFileSync(file, postProcessed);
-        } catch (e) {
-          errors.push(e.message);
         }
         completed++;
         if (showProgressBar) {
@@ -385,6 +345,11 @@ Examples:
         }
       }
 
+      // Say WHICH files were skipped, so they don't linger unformatted
+      for (const file of skippedFiles) {
+        console.error(`Skipped ${file}: nested preprocessor directives`);
+      }
+
       if (errors.length > 0) {
         for (const err of errors) {
           console.error(err);
@@ -401,19 +366,16 @@ Examples:
 
         const text = fs.readFileSync(file, "utf-8");
 
-        // Skip files with nested preprocessor directives
-        if (hasNestedPreprocessor(text, parser)) {
-          console.error(`Skipping ${file}: nested preprocessor directives`);
-          continue;
+        try {
+          const formatted = await formatText(text, parser, (t) => runTopiary(t, file));
+          process.stdout.write(formatted);
+        } catch (e) {
+          if (e instanceof NestedPreprocessorError) {
+            console.error(`Skipping ${file}: nested preprocessor directives`);
+            continue;
+          }
+          throw e;
         }
-
-        const transformed = transformCode(text, parser);
-        const withPlaceholders = preProcessLineContinuations(transformed, parser);
-        const formatted = formatWithTopiary(withPlaceholders, file);
-        const withLineCont = postProcessLineContinuations(formatted);
-        const withCaseIndent = postProcessCaseIndent(withLineCont);
-        const postProcessed = postProcessContinuationIndent(withCaseIndent);
-        process.stdout.write(postProcessed);
       }
 
       if (showProgressBar) {

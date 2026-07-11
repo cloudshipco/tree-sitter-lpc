@@ -30,7 +30,6 @@ Cargo.lock
 
 # Test artifacts
 *.log
-src/parser.c
 *.jar
 
 # LSP build artifacts

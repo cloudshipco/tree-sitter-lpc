@@ -103,9 +103,12 @@ The formatter applies:
 - **Spaces around operators**: `a + b`, `x == y`, `x = 1`
 - **Spaces after keywords**: `if (`, `for (`, `return `
 - **Spaces after commas**: `foo(a, b, c)`
-- **Braces on control statements**: Single-statement `if`/`while`/`for` get braces
+- **Braces on control statements**: Single-statement `if`/`while`/`for` get
+  braces, at any nesting depth
 - **Blank lines**: After block statements, before `return`, and before block
-  statements (`if`/`while`/`for`/`switch`) that follow a plain statement
+  statements (`if`/`while`/`for`/`switch`) that follow a plain statement —
+  but never directly after a `case` label; top-level functions get a blank
+  line before their doc-comment group
 - **Case body indentation**: Code inside `case:` is indented
 - **Array/mapping spacing**: `({ 1, 2, 3 })` preserves internal spaces
 - **Multi-line preservation**: Arrays/mappings written across multiple lines stay multi-line
