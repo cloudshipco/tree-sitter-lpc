@@ -272,6 +272,106 @@ test("blank line before switch preserved",
   }
 }`);
 
+// Regression tests from the 2026-07 review pass
+console.log("\nReview Regressions:");
+
+test("elif chain preserved",
+  `#if FOO
+int x;
+#elif BAR
+int y;
+#else
+int z;
+#endif`,
+  `#if FOO
+int x;
+#elif BAR
+int y;
+#else
+int z;
+#endif`);
+
+test("ifdef with numeric argument",
+  `#ifdef 0
+int x;
+#endif`,
+  `#ifdef 0
+int x;
+#endif`);
+
+test("doc comment stays attached to function",
+  `// Returns the counter
+int get_counter() {
+  return counter;
+}`,
+  `// Returns the counter
+int get_counter() {
+  return counter;
+}`);
+
+test("nested single-statement structures all get braces",
+  `void f() { while (x) if (y) a(); }`,
+  `void f() {
+  while (x) {
+    if (y) {
+      a();
+    }
+  }
+}`);
+
+test("case body with if block indents correctly",
+  `void f() { switch (x) { case 1: if (y) { a(); } break; case 2: b(); } }`,
+  `void f() {
+  switch (x) {
+    case 1:
+      if (y) {
+        a();
+      }
+      break;
+    case 2:
+      b();
+  }
+}`);
+
+test("multi-line string content in case body preserved",
+  `void f() {
+  switch (x) {
+    case 1:
+      s = "abc
+    def";
+      break;
+  }
+}`,
+  `void f() {
+  switch (x) {
+    case 1:
+      s = "abc
+    def";
+      break;
+  }
+}`);
+
+test("top-level ifdef after function is still formatted",
+  `mixed *items = ({ });
+void f() { work(); }
+#ifdef FOO
+int x;
+#endif`,
+  `mixed *items = ({ });
+
+void f() {
+  work();
+}
+#ifdef FOO
+int x;
+#endif`);
+
+test("char literal with octal escape",
+  `void f() { x = '\\033'; }`,
+  `void f() {
+  x = '\\033';
+}`);
+
 // Summary
 console.log("\n=== Results ===");
 console.log(`Passed: ${passed}`);

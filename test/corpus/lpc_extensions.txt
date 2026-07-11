@@ -171,3 +171,44 @@ void f() {
                   (call_expression
                     (identifier)
                     (identifier)))))))))))
+
+================================================================================
+Char literal escapes - octal and hex
+================================================================================
+
+void test() {
+  int a = '\033';
+  int b = '\x1B';
+  int c = '\n';
+  int d = 'a';
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (type_specifier)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (declaration
+        (type_specifier)
+        (declarator
+          (identifier)
+          (char_literal)))
+      (declaration
+        (type_specifier)
+        (declarator
+          (identifier)
+          (char_literal)))
+      (declaration
+        (type_specifier)
+        (declarator
+          (identifier)
+          (char_literal)))
+      (declaration
+        (type_specifier)
+        (declarator
+          (identifier)
+          (char_literal))))))

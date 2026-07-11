@@ -135,6 +135,7 @@ module.exports = grammar({
       choice('#else', seq('#elif', $.preproc_arg)),
       /\n/,
       repeat($._preproc_body_item),
+      optional($.preproc_else),  // Allow #elif ... #elif ... #else chains
     ),
 
     // Body items can be either top-level items or statements (for #if inside functions)
@@ -657,7 +658,9 @@ module.exports = grammar({
       "'",
       choice(
         /[^'\\]/,
-        /\\./,  // escape sequence within token
+        /\\[0-7]{1,3}/,        // Octal escape: '\033'
+        /\\x[0-9a-fA-F]{1,2}/, // Hex escape: '\x1B'
+        /\\./,                 // Other escapes: '\n', '\\'
       ),
       "'",
     )),

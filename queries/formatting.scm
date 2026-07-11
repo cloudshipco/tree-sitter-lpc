@@ -13,8 +13,21 @@
 ; ============================================
 
 ; Blank line before function definitions
+; Explicit node types (not (_)) so a doc comment directly above a function
+; does not get a blank line inserted after it
 (
-  (_) @append_delimiter
+  [
+    (function_definition)
+    (function_declaration)
+    (declaration)
+    (inherit_statement)
+    (preproc_include)
+    (preproc_define)
+    (preproc_ifdef)
+    (preproc_if)
+    (preproc_undef)
+    (preproc_pragma)
+  ] @append_delimiter
   .
   (function_definition)
   (#delimiter! "\n")
@@ -117,8 +130,13 @@
 )
 
 ; #else and #endif need newlines
+; #elif keeps its condition on the same line; the hardline goes after the arg
 (preproc_else
-  ["#else" "#elif"] @prepend_hardline @append_hardline
+  "#else" @prepend_hardline @append_hardline
+)
+(preproc_else
+  "#elif" @prepend_hardline @append_space
+  (preproc_arg) @append_hardline
 )
 (preproc_ifdef
   "#endif" @prepend_hardline @append_hardline
@@ -134,7 +152,7 @@
 )
 (preproc_ifdef
   ["#ifdef" "#ifndef"] @append_space
-  (identifier) @append_hardline
+  [(identifier) (number_literal)] @append_hardline
 )
 
 ; Space after #include

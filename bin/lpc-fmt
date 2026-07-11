@@ -24,6 +24,7 @@ const {
   postProcessCaseIndent,
   checkSyntax,
   checkWarnings,
+  hasNestedPreprocessor,
 } = require(path.join(ROOT, "lib/transform.js"));
 
 let parser;
@@ -79,6 +80,10 @@ function formatWithTopiaryAsync(text, filename = "<stdin>") {
         }
       }
     );
+    // If topiary is missing or exits early, writing to its closed stdin
+    // raises EPIPE; swallow it here so the exec callback above rejects
+    // per-file instead of the stream error crashing the whole run
+    child.stdin.on("error", () => {});
     child.stdin.write(text);
     child.stdin.end();
   });
@@ -99,29 +104,6 @@ function findLpcFiles(dir, files = []) {
     }
   }
   return files;
-}
-
-// Check if file has preprocessor directives inside function bodies
-// These can't be formatted safely, so we skip them
-function hasNestedPreprocessor(text) {
-  // Find position of first opening brace (start of function body)
-  const firstBrace = text.indexOf("{");
-  if (firstBrace === -1) {
-    return false;
-  }
-
-  // Check if any preprocessor directive appears after first brace
-  const afterBrace = text.substring(firstBrace);
-  if (/^#\s*(if|ifdef|ifndef|else|elif|endif)\b/m.test(afterBrace)) {
-    return true;
-  }
-
-  // Also check for indented preprocessor directives anywhere
-  if (/^\s+#\s*(if|ifdef|ifndef|else|elif|endif|define|undef)\b/m.test(text)) {
-    return true;
-  }
-
-  return false;
 }
 
 // Run tasks with limited concurrency
@@ -157,6 +139,14 @@ function clearProgress(isTerminal) {
   if (!isTerminal) return;
   process.stderr.write("\r" + " ".repeat(80) + "\r");
 }
+
+// Exit quietly when our stdout pipe is closed (e.g. `lpc-fmt format f.c | head`)
+process.stdout.on("error", (err) => {
+  if (err.code === "EPIPE") {
+    process.exit(0);
+  }
+  throw err;
+});
 
 // Main
 async function main() {
@@ -231,6 +221,13 @@ Examples:
       console.error(`Error: ${input} not found`);
       process.exit(1);
     }
+  }
+
+  // Inputs were given but expanded to nothing: report it rather than
+  // falling through to the read-from-stdin path
+  if (inputs.length > 0 && files.length === 0) {
+    console.error("Error: no .c files found in the given paths");
+    process.exit(1);
   }
 
   // Determine if we should show progress (terminal + multiple files + not piping output)
@@ -325,7 +322,7 @@ Examples:
       const text = fs.readFileSync(0, "utf-8");
 
       // Check for nested preprocessor directives
-      if (hasNestedPreprocessor(text)) {
+      if (hasNestedPreprocessor(text, parser)) {
         console.error("Error: Cannot format code with nested preprocessor directives");
         process.exit(1);
       }
@@ -350,7 +347,7 @@ Examples:
           const text = fs.readFileSync(file, "utf-8");
 
           // Skip files with nested preprocessor directives
-          if (hasNestedPreprocessor(text)) {
+          if (hasNestedPreprocessor(text, parser)) {
             skipped++;
             skippedFiles.push(file);
             completed++;
@@ -405,7 +402,7 @@ Examples:
         const text = fs.readFileSync(file, "utf-8");
 
         // Skip files with nested preprocessor directives
-        if (hasNestedPreprocessor(text)) {
+        if (hasNestedPreprocessor(text, parser)) {
           console.error(`Skipping ${file}: nested preprocessor directives`);
           continue;
         }

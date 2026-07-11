@@ -22,7 +22,15 @@ import * as fs from "fs";
 
 // Import shared transform functions
 const transformModule = require("../../lib/transform.js");
-const { transformCode, postProcessContinuationIndent, postProcessCaseIndent, checkSyntax } = transformModule;
+const {
+  transformCode,
+  preProcessLineContinuations,
+  postProcessLineContinuations,
+  postProcessContinuationIndent,
+  postProcessCaseIndent,
+  checkSyntax,
+  hasNestedPreprocessor,
+} = transformModule;
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -111,8 +119,19 @@ connection.onDocumentFormatting(
       return [];
     }
 
-    // Transform code first (add braces, blank lines, explicit +)
-    const text = transformCode(document.getText(), parser);
+    // Same guard as the CLI: directives inside function bodies can't be
+    // reformatted safely (Topiary would move them off column 1)
+    if (hasNestedPreprocessor(document.getText(), parser)) {
+      connection.console.warn(
+        "Not formatting: preprocessor directives inside function bodies"
+      );
+      return [];
+    }
+
+    // Transform code first (add braces, blank lines, explicit +),
+    // then protect string line continuations from Topiary
+    const transformed = transformCode(document.getText(), parser);
+    const text = preProcessLineContinuations(transformed, parser);
 
     try {
       // Check if topiary is available
@@ -140,8 +159,10 @@ connection.onDocumentFormatting(
         }
       );
 
-      // Post-process to fix case body and continuation indentation
-      const withCaseIndent = postProcessCaseIndent(formatted);
+      // Post-process: restore line continuations, then fix case body and
+      // continuation indentation (same order as bin/lpc-fmt)
+      const withLineCont = postProcessLineContinuations(formatted);
+      const withCaseIndent = postProcessCaseIndent(withLineCont);
       const postProcessed = postProcessContinuationIndent(withCaseIndent);
 
       // Return full document replacement
