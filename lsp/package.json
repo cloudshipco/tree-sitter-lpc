@@ -2,6 +2,7 @@
   "name": "lpc-language-server",
   "version": "0.1.0",
   "description": "Language server for LPC (LDMud flavor)",
+  "license": "MIT",
   "main": "dist/server.js",
   "bin": {
     "lpc-language-server": "./dist/server.js"
